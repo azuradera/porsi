@@ -1,0 +1,323 @@
+/* =========================================================
+   KEUANGAN — RINGKASAN PEMASUKAN (grafik 6 bulan)
+   Tempel di PALING BAWAH globals.css.
+   Memakai token tema biru langit yang sudah ada.
+   ========================================================= */
+
+.income-overview {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+
+.income-overview-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: 20px;
+  align-items: stretch;
+}
+
+.income-overview-bottom {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.income-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  padding: 22px;
+}
+
+.income-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.income-card-label {
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.income-unit {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+
+/* ---------- Total ---------- */
+.income-total {
+  margin-top: 14px;
+  color: var(--text-heading);
+  font-size: clamp(28px, 2.4vw + 14px, 40px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.income-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+}
+
+.income-trend strong {
+  color: var(--ok);
+  font-weight: 650;
+}
+
+.income-trend svg {
+  color: var(--ok);
+}
+
+.income-trend.is-down strong,
+.income-trend.is-down svg {
+  color: var(--bad);
+}
+
+.income-trend.is-neutral {
+  color: var(--text-muted);
+}
+
+.income-stats {
+  margin: auto 0 0;
+  padding-top: 22px;
+}
+
+.income-stats > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 0;
+  border-top: 1px solid var(--border);
+}
+
+.income-stats dt {
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+}
+
+.income-stats dd {
+  margin: 0;
+  color: var(--text-heading);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  text-align: right;
+}
+
+/* ---------- Grafik batang ---------- */
+.income-chart {
+  display: grid;
+  flex: 1;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: clamp(8px, 2vw, 24px);
+  min-height: 230px;
+  margin-top: 16px;
+}
+
+.income-bar-col {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.income-bar-track {
+  position: relative;
+  display: flex;
+  flex: 1;
+  align-items: flex-end;
+  padding-top: 26px;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.income-bar {
+  position: relative;
+  width: 100%;
+  border-radius: 7px 7px 0 0;
+  background: #bbd5ee;
+  transition: filter 150ms ease;
+}
+
+.income-bar:hover {
+  filter: brightness(0.95);
+}
+
+.income-bar.is-current {
+  background: var(--sky-primary-dark);
+}
+
+.income-bar-value {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  transform: translateX(-50%);
+}
+
+.income-bar.is-current .income-bar-value {
+  color: var(--text-heading);
+  font-weight: 700;
+}
+
+.income-bar-label {
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  text-align: center;
+}
+
+.income-bar-label.is-current {
+  color: var(--text-heading);
+  font-weight: 700;
+}
+
+/* ---------- Per paket ---------- */
+.income-package-list,
+.income-payment-list {
+  display: flex;
+  margin: 14px 0 0;
+  padding: 0;
+  flex-direction: column;
+  list-style: none;
+}
+
+.income-package-list {
+  gap: 18px;
+}
+
+.income-package-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.income-package-row strong {
+  color: var(--text-heading);
+  font-size: var(--fs-md);
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.income-package-row span {
+  flex: 0 0 auto;
+  color: var(--text-primary);
+  font-size: var(--fs-sm);
+  font-weight: 650;
+}
+
+.income-progress {
+  height: 10px;
+  margin: 8px 0 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--sky-soft);
+}
+
+.income-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--sky-primary);
+}
+
+.income-package-list small {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+
+/* ---------- Pembayaran terbaru ---------- */
+.income-payment-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.income-payment-list li:first-child {
+  padding-top: 4px;
+}
+
+.income-payment-list li:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.income-payment-list li > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.income-payment-list li > div strong {
+  color: var(--text-heading);
+  font-size: var(--fs-md);
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.income-payment-list li > div span {
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+}
+
+.income-payment-amount {
+  flex: 0 0 auto;
+  color: var(--ok);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.income-empty {
+  margin-top: 14px;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.income-note {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+
+/* ---------- Responsif ---------- */
+@media (max-width: 1024px) {
+  .income-overview-top,
+  .income-overview-bottom {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .income-overview,
+  .income-overview-top,
+  .income-overview-bottom {
+    gap: 12px;
+  }
+
+  .income-card {
+    padding: 16px;
+  }
+
+  .income-chart {
+    min-height: 190px;
+    gap: 6px;
+  }
+}
