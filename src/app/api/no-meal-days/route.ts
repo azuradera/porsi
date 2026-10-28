@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { requireAdmin } from "@/lib/require-admin";
-import { parseBusinessDate } from "@/lib/date";
+import {
+  getBusinessDate,
+  parseBusinessDate,
+} from "@/lib/date";
+import { processSubscriptionDay } from "@/services/subscription-extension";
 
 async function lockSubscription(
   tx: Prisma.TransactionClient,
@@ -142,7 +146,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await prisma.$transaction(
+    const today = parseBusinessDate(getBusinessDate());
+
+    const noMealDay = await prisma.$transaction(
       async (tx) => {
         await lockSubscription(tx, subscriptionId);
 
@@ -202,7 +208,7 @@ export async function POST(request: Request) {
           throw new Error("PICKUP_ALREADY_EXISTS");
         }
 
-        const noMealDay = await tx.noMealDay.create({
+        return tx.noMealDay.create({
           data: {
             customerId,
             subscriptionId,
@@ -217,18 +223,44 @@ export async function POST(request: Request) {
             },
           },
         });
-
-        return noMealDay;
       },
       {
         isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
       },
     );
 
+    let processingResult:
+      | Awaited<ReturnType<typeof processSubscriptionDay>>
+      | null = null;
+
+    try {
+      processingResult = await processSubscriptionDay(
+        subscriptionId,
+        parsedDate,
+      );
+    } catch {
+      return NextResponse.json(
+        {
+          message:
+            "Catatan Tidak Ambil tersimpan, tetapi perpanjangan belum selesai diproses. Sistem perlu memproses ulang tanggal tersebut.",
+          noMealDay,
+          extensionPending: true,
+        },
+        { status: 201 },
+      );
+    }
+
     return NextResponse.json(
       {
-        message: "Jadwal tidak mengambil makanan berhasil dicatat",
-        noMealDay: result,
+        message: processingResult.extended
+          ? "Tidak Ambil berhasil dicatat dan masa langganan diperpanjang 1 hari"
+          : "Tidak Ambil berhasil dicatat",
+        noMealDay,
+        extension: processingResult.extended
+          ? processingResult.extension
+          : null,
+        extended: processingResult.extended,
+        extensionPending: false,
       },
       { status: 201 },
     );
@@ -249,6 +281,10 @@ export async function POST(request: Request) {
         DATE_OUTSIDE_SUBSCRIPTION: {
           message: "Tanggal berada di luar masa langganan",
           status: 409,
+        },
+        FUTURE_DATE_NOT_ALLOWED: {
+          message: "Skip Day manual hanya dapat dicatat untuk hari ini atau tanggal sebelumnya",
+          status: 400,
         },
         DAY_ALREADY_PROCESSED: {
           message: "Tanggal tersebut sudah selesai diproses",
@@ -281,7 +317,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           message:
-            "Terjadi konflik transaksi. Periksa jadwal yang ada sebelum mencoba kembali.",
+            "Tanggal sedang diproses atau sudah memiliki catatan. Muat ulang data sebelum mencoba kembali.",
         },
         { status: 409 },
       );

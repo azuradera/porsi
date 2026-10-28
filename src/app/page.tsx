@@ -80,6 +80,17 @@ type DashboardData = {
   }[];
 };
 
+type FinanceReport = {
+  payments?: {
+    id: string;
+    amount: number | string;
+    paymentDate: string;
+    customerName: string;
+    customerCode: string;
+    packageName: string;
+  }[];
+};
+
 function Icon({
   name,
   size = 20,
@@ -402,9 +413,19 @@ export default function Home() {
 
     async function loadDashboard() {
       try {
-        const response = await fetch("/api/dashboard", {
-          cache: "no-store",
-        });
+        const now = new Date();
+        const currentMonth = `${now.getFullYear()}-${String(
+          now.getMonth() + 1,
+        ).padStart(2, "0")}`;
+
+        const [response, financeResponse] = await Promise.all([
+          fetch("/api/dashboard", {
+            cache: "no-store",
+          }),
+          fetch(`/api/reports/finance?month=${currentMonth}`, {
+            cache: "no-store",
+          }),
+        ]);
 
         if (!response.ok) {
           throw new Error(
@@ -415,6 +436,29 @@ export default function Home() {
         }
 
         const result = (await response.json()) as DashboardData;
+
+        if (!financeResponse.ok) {
+          throw new Error("Laporan pemasukan bulan ini tidak dapat dimuat.");
+        }
+
+        const financeData = (await financeResponse.json()) as FinanceReport;
+        const monthlyPayments = Array.isArray(financeData.payments)
+          ? financeData.payments
+          : [];
+
+        result.summary.totalIncomeToday = monthlyPayments.reduce(
+          (total, payment) => total + Number(payment.amount),
+          0,
+        );
+
+        result.recentPayments = monthlyPayments
+          .sort((a, b) =>
+            b.paymentDate.slice(0, 10).localeCompare(a.paymentDate.slice(0, 10)),
+          )
+          .map((payment) => ({
+            ...payment,
+            amount: Number(payment.amount),
+          }));
 
         if (active) {
           setData(result);
@@ -521,17 +565,15 @@ export default function Home() {
                 accent="mint"
               />
               <StatCard
-                label="Arus kas hari ini"
-                value={
-                  loading
-                    ? "—"
-                    : formatCurrency(
-                        data?.summary.netCashFlowToday ?? 0,
-                      )
-                }
-                description="Pemasukan dikurangi pengeluaran"
-                icon="trending-up"
-                accent="blue"
+              label="Pemasukan bulan ini"
+              value={
+                loading
+                  ? "—"
+                  : formatCurrency(data?.summary.totalIncomeToday ?? 0)
+              }
+              description="Total pembayaran pada bulan berjalan"
+              icon="trending-up"
+              accent="blue"
               />
             </section>
 
@@ -691,9 +733,9 @@ export default function Home() {
                 <div className="panel-header">
                   <div>
                     <div className="panel-kicker">KEUANGAN</div>
-                    <h2 className="panel-title">Ringkasan hari ini</h2>
+                    <h2 className="panel-title">Pemasukan bulan ini</h2>
                     <p className="panel-description">
-                      Pemasukan dan pengeluaran yang tercatat hari ini.
+                      Total pembayaran pelanggan pada bulan berjalan.
                     </p>
                   </div>
                   <Link href="/finance" className="panel-link">
@@ -705,47 +747,13 @@ export default function Home() {
                   <div className="finance-item">
                     <span className="finance-label">
                       <span className="finance-dot income-dot" />
-                      Pemasukan
+                      Pemasukan bulan ini
                     </span>
                     <strong className="finance-amount">
                       {loading
                         ? "—"
-                        : formatCurrency(
-                            data?.summary.totalIncomeToday ?? 0,
-                          )}
+                        : formatCurrency(data?.summary.totalIncomeToday ?? 0)}
                     </strong>
-                  </div>
-
-                  <div className="finance-item">
-                    <span className="finance-label">
-                      <span className="finance-dot expense-dot" />
-                      Pengeluaran
-                    </span>
-                    <strong className="finance-amount">
-                      {loading
-                        ? "—"
-                        : formatCurrency(
-                            data?.summary.totalExpensesToday ?? 0,
-                          )}
-                    </strong>
-                  </div>
-
-                  <div className="finance-balance">
-                    <div>
-                      <span className="finance-balance-label">
-                        Selisih kas
-                      </span>
-                      <strong className="finance-balance-value">
-                        {loading
-                          ? "—"
-                          : formatCurrency(
-                              data?.summary.netCashFlowToday ?? 0,
-                            )}
-                      </strong>
-                    </div>
-                    <span className="finance-balance-icon">
-                      <Icon name="wallet" size={22} />
-                    </span>
                   </div>
                 </div>
               </article>

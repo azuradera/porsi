@@ -54,6 +54,30 @@ type Pickup = {
   };
 };
 
+type NoMealDay = {
+  id: string;
+  customerId: string;
+  subscriptionId: string;
+  date: string;
+  processed: boolean;
+  createdAt: string;
+  customer: Customer;
+  subscription: {
+    id: string;
+    startDate: string;
+    endDate: string;
+    status: "ACTIVE" | "COMPLETED" | "CANCELLED";
+    package: CateringPackage;
+  };
+  extension?: {
+    id: string;
+    days: number;
+    type: "AUTOMATIC" | "MANUAL";
+    previousEndDate: string;
+    newEndDate: string;
+  } | null;
+};
+
 type ApiResponse<T> = {
   message?: string;
   subscriptions?: T[];
@@ -273,6 +297,13 @@ function getErrorMessage(data: unknown, fallback: string) {
 export default function PickupsPage() {
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [pickups, setPickups] = useState<Pickup[]>([]);
+  const [noMealDays, setNoMealDays] = useState<NoMealDay[]>([]);
+  const [skipDate, setSkipDate] = useState("");
+  const [skipSubscriptionId, setSkipSubscriptionId] = useState("");
+  const [skipSearch, setSkipSearch] = useState("");
+  const [skipSaving, setSkipSaving] = useState(false);
+  const [skipHistoryDate, setSkipHistoryDate] = useState("");
+  const [showSkipConfirm, setShowSkipConfirm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
@@ -301,20 +332,38 @@ export default function PickupsPage() {
     if (showLoader) setLoading(true);
 
     try {
-      const [subscriptionResponse, pickupResponse] = await Promise.all([
+      const [
+        subscriptionResponse,
+        pickupResponse,
+        noMealDayResponse,
+      ] = await Promise.all([
         fetch("/api/subscriptions", { cache: "no-store" }),
         fetch("/api/meal-pickups", { cache: "no-store" }),
+        fetch("/api/no-meal-days", { cache: "no-store" }),
       ]);
 
-      if (subscriptionResponse.status === 401 || pickupResponse.status === 401) {
+      if (
+        subscriptionResponse.status === 401 ||
+        pickupResponse.status === 401 ||
+        noMealDayResponse.status === 401
+      ) {
         window.location.href = "/login";
         return;
       }
 
-      const [subscriptionData, pickupData] = (await Promise.all([
+      const [
+        subscriptionData,
+        pickupData,
+        noMealDayData,
+      ] = await Promise.all([
         subscriptionResponse.json(),
         pickupResponse.json(),
-      ])) as [ApiResponse<Subscription>, ApiResponse<Pickup> | Pickup[]];
+        noMealDayResponse.json(),
+      ]) as [
+        ApiResponse<Subscription>,
+        ApiResponse<Pickup> | Pickup[],
+        NoMealDay[] | { message?: string },
+      ];
 
       if (!subscriptionResponse.ok) {
         throw new Error(
@@ -327,13 +376,23 @@ export default function PickupsPage() {
         );
       }
 
+      if (!noMealDayResponse.ok) {
+        throw new Error(
+          getErrorMessage(
+            noMealDayData,
+            "Gagal mengambil riwayat tidak mengambil makanan.",
+          ),
+        );
+      }
+
       setSubscriptions(subscriptionData.subscriptions ?? []);
       setPickups(Array.isArray(pickupData) ? pickupData : []);
+      setNoMealDays(Array.isArray(noMealDayData) ? noMealDayData : []);
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Terjadi kesalahan saat mengambil data.",
       );
-    } 
+    }
     finally {
       loadingRef.current = false;
       setLoading(false);
@@ -370,6 +429,46 @@ export default function PickupsPage() {
         pickupDate <= subscription.endDate.slice(0, 10),
     );
   }, [subscriptions, pickupDate, todayDate]);
+
+  const eligibleSkipSubscriptions = useMemo(() => {
+    const query = normalizeText(skipSearch);
+
+    return subscriptions.filter((subscription) => {
+      const startDate = subscription.startDate.slice(0, 10);
+      const endDate = subscription.endDate.slice(0, 10);
+
+      const eligible =
+        subscription.customer.status === "ACTIVE" &&
+        subscription.status === "ACTIVE" &&
+        skipDate >= startDate &&
+        skipDate <= endDate;
+
+      if (!eligible) return false;
+
+      if (
+        query &&
+        !normalizeText(subscription.customer.name).includes(query) &&
+        !normalizeText(subscription.customer.code).includes(query) &&
+        !normalizeText(subscription.package.name).includes(query)
+      ) {
+        return false;
+      }
+
+      const alreadySkipped = noMealDays.some(
+        (item) =>
+          item.subscriptionId === subscription.id &&
+          item.date.slice(0, 10) === skipDate,
+      );
+
+      const alreadyPickedUp = pickups.some(
+        (item) =>
+          item.subscriptionId === subscription.id &&
+          getPickupDate(item.pickupDate) === skipDate,
+      );
+
+      return !alreadySkipped && !alreadyPickedUp;
+    });
+  }, [subscriptions, skipDate, skipSearch, noMealDays, pickups]);
 
   const selectedSubscription = subscriptions.find((s) => s.id === subscriptionId);
   const selectedMeal = selectedSubscription?.package.meals.find(
@@ -419,6 +518,13 @@ export default function PickupsPage() {
       return matchesSearch && matchesDate;
     });
   }, [pickups, search, historyDate]);
+
+  const filteredNoMealDays = useMemo(() => {
+    return noMealDays.filter(
+      (item) =>
+        !skipHistoryDate || item.date.slice(0, 10) === skipHistoryDate,
+    );
+  }, [noMealDays, skipHistoryDate]);
 
   const summary = useMemo(() => {
     const todayPickups = pickups.filter(
@@ -584,7 +690,7 @@ export default function PickupsPage() {
 
         if (!result) {
           setVoiceStatus(
-            `Ucapan "${transcript || "tidak terdeteksi"}" belum dapat dipahami. Contoh: pelanggan AB1234, lauk ayam, sebanyak dua.`,
+            `Ucapan "${transcript || "tidak terdeteksi"}" belum dapat dipahami. Contoh: kode pelanggan 7Kba, ayam, dua porsi.`
           );
           setPendingVoice(null);
           return;
@@ -614,7 +720,7 @@ export default function PickupsPage() {
 
       setIsListening(true);
       setVoiceStatus(
-        "Mendengarkan. Sebutkan kode atau nama pelanggan, lauk, dan jumlah porsi.",
+        "Mendengarkan. Sebutkan kode pelanggan, menu, dan jumlah porsi.",
       );
     } catch {
       setIsListening(false);
@@ -722,6 +828,69 @@ export default function PickupsPage() {
     }
   }
 
+  async function confirmSaveSkipDay() {
+    if (!skipDate || !skipSubscriptionId || skipSaving) return;
+
+    const subscription = subscriptions.find(
+      (item) => item.id === skipSubscriptionId,
+    );
+
+    if (!subscription) {
+      toast.error("Langganan pelanggan tidak ditemukan.");
+      return;
+    }
+
+    setSkipSaving(true);
+
+    try {
+      const response = await fetch("/api/no-meal-days", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          customerId: subscription.customer.id,
+          subscriptionId: subscription.id,
+          date: skipDate,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.status === 401) {
+        window.location.href = "/login";
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          getErrorMessage(data, "Gagal mencatat jadwal tidak mengambil makanan."),
+        );
+      }
+
+      toast.success(
+        "Skip Day berhasil dicatat",
+        data.message ?? "Jadwal tidak mengambil makanan berhasil disimpan.",
+      );
+
+      setShowSkipConfirm(false);
+      setSkipSubscriptionId("");
+      setSkipSearch("");
+      setSkipHistoryDate(skipDate);
+
+      await loadData(false);
+    } catch (error) {
+      toast.error(
+        "Gagal mencatat Skip Day",
+        error instanceof Error
+          ? error.message
+          : "Terjadi kesalahan saat menyimpan data.",
+      );
+    } finally {
+      setSkipSaving(false);
+    }
+  }
+
   function resetForm() {
     setCustomerQuery("");
     setSubscriptionId("");
@@ -795,38 +964,40 @@ export default function PickupsPage() {
         </article>
       </section>
 
+      {/* 1. Input Suara, di atas card */}
+      <div className="pickups-voice-panel">
+        <div className="pickups-voice-description">
+          <span className="pickups-voice-icon">🎙</span>
+          <div>
+            <strong>Input Suara</strong>
+            <p>Sebutkan kode pelanggan, menu, dan jumlah porsi untuk mencatat pengambilan.</p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          className="subscriptions-primary-button pickups-voice-button"
+          onClick={isListening ? stopVoiceRecognition : startVoiceRecognition}
+          disabled={saving || loading}
+        >
+          {isListening ? "Hentikan Mikrofon" : "Mulai Bicara"}
+        </button>
+
+        {!voiceSupported && (
+          <small className="pickups-voice-note">
+            Browser mungkin tidak mendukung pengenalan suara. Kamu tetap bisa
+            mengisi formulir secara manual.
+          </small>
+        )}
+      </div>
+
+      {/* 2. Catat Pengambilan */}
       <section className="subscriptions-form-panel panel">
         <div className="subscriptions-section-heading">
           <div>
             <h2>Catat Pengambilan</h2>
             <p>Pilih pelanggan atau gunakan input suara untuk mengisi formulir.</p>
           </div>
-        </div>
-
-        <div className="pickups-voice-panel">
-          <div className="pickups-voice-description">
-            <span className="pickups-voice-icon">🎙</span>
-            <div>
-              <strong>Input Suara</strong>
-              <p>Sebutkan nama atau kode pelanggan, lauk, dan jumlah porsi.</p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            className="subscriptions-primary-button pickups-voice-button"
-            onClick={isListening ? stopVoiceRecognition : startVoiceRecognition}
-            disabled={saving || loading}
-          >
-            {isListening ? "Hentikan Mikrofon" : "Mulai Bicara"}
-          </button>
-
-          {!voiceSupported && (
-            <small className="pickups-voice-note">
-              Browser mungkin tidak mendukung pengenalan suara. Kamu tetap bisa
-              mengisi formulir secara manual.
-            </small>
-          )}
         </div>
 
         <form onSubmit={handleSavePickup} className="subscriptions-form">
@@ -888,6 +1059,7 @@ export default function PickupsPage() {
               </div>
             </div>
           </div>
+
           <label className="subscriptions-field">
             <span>Cari Pelanggan</span>
             <input
@@ -996,8 +1168,7 @@ export default function PickupsPage() {
               <p>Menu: {pendingVoice.mealQuery}</p>
               <p>Jumlah: {pendingVoice.quantity} porsi</p>
               <small>
-                Hasil suara hanya mengisi formulir. Data belum disimpan sampai
-                kamu mengonfirmasi pencatatan.
+                Periksa nama pelanggan, menu, dan jumlah porsi sebelum menyimpan. Data belum tersimpan sampai pencatatan dikonfirmasi.
               </small>
             </div>
           )}
@@ -1036,6 +1207,105 @@ export default function PickupsPage() {
         </form>
       </section>
 
+      {/* 3. Tandai Tidak Ambil */}
+      <section className="subscriptions-form-panel panel">
+        <div className="subscriptions-section-heading">
+          <div>
+            <h2>Tandai Tidak Ambil</h2>
+            <p>
+              Catat pelanggan yang tidak mengambil makanan pada tanggal tertentu.
+            </p>
+          </div>
+        </div>
+
+        <form
+          className="subscriptions-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+
+            if (!skipDate || !skipSubscriptionId) {
+              toast.error("Tanggal dan pelanggan wajib dipilih.");
+              return;
+            }
+
+            setShowSkipConfirm(true);
+          }}
+        >
+          <div className="subscriptions-field">
+            <span>Tanggal Tidak Ambil</span>
+            <DatePicker
+              value={skipDate}
+              aria-label="Tanggal tidak mengambil makanan"
+              onChange={(value) => {
+                setSkipDate(value);
+                setSkipSubscriptionId("");
+              }}
+            />
+          </div>
+
+          <label className="subscriptions-field">
+            <span>Cari Pelanggan</span>
+            <input
+              type="search"
+              value={skipSearch}
+              onChange={(event) => {
+                setSkipSearch(event.target.value);
+                setSkipSubscriptionId("");
+              }}
+              placeholder="Nama, kode, atau paket pelanggan..."
+            />
+          </label>
+
+          <div className="subscriptions-field">
+            <span>Pelanggan dan Langganan</span>
+            <Select
+              value={skipSubscriptionId}
+              onChange={setSkipSubscriptionId}
+              options={eligibleSkipSubscriptions.map((subscription) => ({
+                value: subscription.id,
+                label: `${subscription.customer.code} · ${subscription.customer.name} · ${subscription.package.name}`,
+              }))}
+              placeholder="Pilih pelanggan"
+              aria-label="Pelanggan yang tidak mengambil makanan"
+            />
+
+            {skipDate && eligibleSkipSubscriptions.length === 0 && (
+              <small>
+                Tidak ada langganan yang memenuhi syarat pada tanggal tersebut.
+              </small>
+            )}
+          </div>
+
+          <div className="subscriptions-form-actions">
+            <button
+              type="button"
+              className="subscriptions-secondary-button"
+              disabled={skipSaving}
+              onClick={() => {
+                setSkipSubscriptionId("");
+                setSkipSearch("");
+              }}
+            >
+              Reset Form
+            </button>
+
+            <button
+              type="submit"
+              className="subscriptions-primary-button"
+              disabled={
+                loading ||
+                skipSaving ||
+                !skipDate ||
+                !skipSubscriptionId
+              }
+            >
+              Tandai Tidak Ambil
+            </button>
+          </div>
+        </form>
+      </section>
+
+      {/* Riwayat Pengambilan */}
       <section className="subscriptions-list-panel panel">
         <div className="subscriptions-section-heading">
           <div>
@@ -1176,6 +1446,89 @@ export default function PickupsPage() {
         )}
       </section>
 
+      {/* Riwayat Tidak Ambil */}
+      <section className="subscriptions-list-panel panel">
+        <div className="subscriptions-section-heading">
+          <div>
+            <h2>Riwayat Tidak Ambil</h2>
+            <p>
+              {filteredNoMealDays.length} catatan tidak mengambil makanan.
+            </p>
+          </div>
+        </div>
+
+        <div className="subscriptions-filters pickups-history-filters">
+          <div className="pickups-date-filter">
+            <span>Filter tanggal</span>
+            <DatePicker
+              value={skipHistoryDate}
+              onChange={setSkipHistoryDate}
+              aria-label="Filter tanggal riwayat tidak ambil"
+            />
+          </div>
+
+          <button
+            type="button"
+            className="subscriptions-secondary-button"
+            onClick={() => setSkipHistoryDate("")}
+          >
+            Semua Tanggal
+          </button>
+        </div>
+
+        {filteredNoMealDays.length === 0 ? (
+          <div className="subscriptions-empty-state">
+            <h3>Belum ada catatan Tidak Ambil</h3>
+            <p>Catatan yang sesuai dengan filter akan muncul di sini.</p>
+          </div>
+        ) : (
+          <div className="subscriptions-table-wrapper">
+            <table className="subscriptions-table">
+              <thead>
+                <tr>
+                  <th>Pelanggan</th>
+                  <th>Paket</th>
+                  <th>Tanggal Tidak Ambil</th>
+                  <th>Perpanjangan</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {filteredNoMealDays.map((item) => (
+                  <tr key={item.id}>
+                    <td>
+                      <div className="subscriptions-customer-cell">
+                        <span className="subscriptions-avatar">
+                          {item.customer.name
+                            .trim()
+                            .charAt(0)
+                            .toUpperCase() || "?"}
+                        </span>
+
+                        <span>
+                          <strong>{item.customer.name}</strong>
+                          <small>{item.customer.code}</small>
+                        </span>
+                      </div>
+                    </td>
+
+                    <td>{item.subscription.package.name}</td>
+
+                    <td>{formatDate(item.date)}</td>
+
+                    <td>
+                      {item.extension
+                        ? `${item.extension.days} hari`
+                        : "Belum diperpanjang"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
       <Dialog
         open={showConfirm && Boolean(selectedSubscription && selectedMeal)}
         onClose={() => setShowConfirm(false)}
@@ -1241,10 +1594,80 @@ export default function PickupsPage() {
       </Dialog>
 
       <Dialog
+        open={showSkipConfirm}
+        onClose={() => setShowSkipConfirm(false)}
+        busy={skipSaving}
+        icon="!"
+        title="Konfirmasi Tidak Ambil"
+        description="Pastikan pelanggan dan tanggal sudah benar sebelum menyimpan."
+        footer={
+          <>
+            <button
+              type="button"
+              className="subscriptions-secondary-button"
+              disabled={skipSaving}
+              onClick={() => setShowSkipConfirm(false)}
+            >
+              Periksa Lagi
+            </button>
+
+            <button
+              type="button"
+              className="subscriptions-primary-button"
+              disabled={skipSaving}
+              onClick={() => void confirmSaveSkipDay()}
+            >
+              {skipSaving ? "Menyimpan..." : "Ya, Catat"}
+            </button>
+          </>
+        }
+      >
+        <dl className="dialog-rows">
+          <div>
+            <dt>Pelanggan</dt>
+            <dd>
+              {
+                subscriptions.find(
+                  (item) => item.id === skipSubscriptionId,
+                )?.customer.name ?? "-"
+              }
+            </dd>
+          </div>
+
+          <div>
+            <dt>Kode Pelanggan</dt>
+            <dd>
+              {
+                subscriptions.find(
+                  (item) => item.id === skipSubscriptionId,
+                )?.customer.code ?? "-"
+              }
+            </dd>
+          </div>
+
+          <div>
+            <dt>Paket</dt>
+            <dd>
+              {
+                subscriptions.find(
+                  (item) => item.id === skipSubscriptionId,
+                )?.package.name ?? "-"
+              }
+            </dd>
+          </div>
+
+          <div>
+            <dt>Tanggal</dt>
+            <dd>{formatDate(skipDate)}</dd>
+          </div>
+        </dl>
+      </Dialog>
+
+      <Dialog
         open={showVoiceDialog}
         onClose={stopVoiceRecognition}
         title="Input Suara"
-        description="Sebutkan kode atau nama pelanggan, nama lauk, dan jumlah porsi."
+        description="Sebutkan kode pelanggan, menu yang diambil, dan jumlah porsinya."
         icon="🎙"
       >
         <div className="pickups-voice-dialog-content">
@@ -1267,9 +1690,7 @@ export default function PickupsPage() {
 
           <div className="pickups-voice-dialog-example">
             <span>Contoh ucapan</span>
-            <strong>
-              Pelanggan AB1234, lauk ayam, sebanyak dua.
-            </strong>
+            <strong>Kode pelanggan 7Kba, ayam, dua porsi.</strong>
           </div>
 
           {pendingVoice && selectedSubscription && selectedMeal && (

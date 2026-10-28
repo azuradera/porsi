@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+  import { NextRequest, NextResponse } from "next/server";
 import { randomInt } from "node:crypto";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -9,13 +9,18 @@ import {
   parseBusinessDate,
 } from "@/lib/date";
 
-function generateCustomerCode() {
-  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  const first = letters[randomInt(letters.length)];
-  const second = letters[randomInt(letters.length)];
-  const numbers = randomInt(1000, 10000);
+function generateCustomerCode(name: string) {
+  const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  const first = characters[randomInt(characters.length)];
+  const second = characters[randomInt(characters.length)];
+  const namePrefix = name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z]/g, "")
+    .slice(0, 2)
+    .toLowerCase();
 
-  return `${first}${second}${numbers}`;
+  return `${first}${second}${namePrefix}`;
 }
 
 function isPrismaError(
@@ -259,7 +264,7 @@ export async function POST(request: NextRequest) {
     }
 
     for (let attempt = 0; attempt < 5; attempt++) {
-      const code = generateCustomerCode();
+      const code = generateCustomerCode(name);
 
       try {
         const result = await prisma.$transaction(

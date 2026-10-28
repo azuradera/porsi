@@ -242,6 +242,19 @@ export async function POST(request: Request) {
           throw new Error("PICKUP_DATE_PROCESSING");
         }
 
+        const noMealDay = await tx.noMealDay.findUnique({
+          where: {
+            subscriptionId_date: {
+              subscriptionId,
+              date: parsedDate,
+            },
+          },
+        });
+
+        if (noMealDay) {
+          throw new Error("NO_MEAL_DAY_RECORDED");
+        }
+
         const packageMeal = await tx.packageMeal.findUnique({
           where: { id: packageMealId },
         });
@@ -354,6 +367,10 @@ export async function POST(request: Request) {
           message:
             "Kuota pengambilan harian sudah tidak mencukupi",
           status: 409,
+        },
+        NO_MEAL_DAY_RECORDED: {
+        message: "Tanggal tersebut sudah ditandai Tidak Ambil",
+        status: 409,
         },
       };
 
