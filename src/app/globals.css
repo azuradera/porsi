@@ -5422,6 +5422,10 @@ overflow-wrap: anywhere;
   overflow: visible;
 }
 
+.pickups-page .subscriptions-form-panel.panel:focus-within {
+  z-index: 30;
+}
+
 .pickups-page .subscriptions-list-panel.panel {
   position: relative;
   z-index: 1;
@@ -5511,6 +5515,16 @@ overflow-wrap: anywhere;
   border-radius: var(--radius-md);
   background: var(--surface-solid);
   box-shadow: var(--shadow-lg);
+}
+
+@media (max-width: 760px) {
+  .pickups-page .pickups-time-select .select-menu {
+    position: static;
+    width: 100%;
+    max-height: 150px;
+    margin-top: 6px;
+    animation: none;
+  }
 }
 
 .pickups-page .pickups-time-select .select-item {
@@ -7273,5 +7287,136 @@ textarea::placeholder,
   .pickups-meal-card {
     min-height: 56px;
     padding: 12px;
+  }
+}
+
+.pickups-customer-field {
+  position: relative;
+  z-index: 5;
+}
+
+.pickups-customer-autocomplete {
+  position: relative;
+  width: 100%;
+}
+
+.pickups-customer-autocomplete input {
+  width: 100%;
+}
+
+.pickups-customer-options {
+  position: absolute;
+  top: calc(100% + 7px);
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  display: grid;
+  max-height: 240px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 13px;
+  background: var(--surface-solid);
+  box-shadow: var(--shadow-lg);
+}
+
+.pickups-customer-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--foreground, #f5f1ff);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.18s ease;
+}
+
+.pickups-customer-option:hover,
+.pickups-customer-option.is-selected {
+  background: rgba(185, 164, 255, 0.12);
+}
+
+.pickups-customer-option-main {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.pickups-customer-option-main strong {
+  overflow: hidden;
+  font-size: 0.9rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pickups-customer-option-main small {
+  color: var(--muted, #a9a4b9);
+  font-size: 0.78rem;
+}
+
+.pickups-customer-option-check {
+  color: #83e9b9;
+  font-weight: 700;
+}
+
+.pickups-customer-empty {
+  padding: 15px 12px;
+  color: var(--muted, #a9a4b9);
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+
+.pickups-page .pickups-record-form {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+}
+
+.pickups-page .pickups-current-datetime {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pickups-page .pickups-current-datetime-value {
+  display: flex;
+  min-height: 60px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  padding: 11px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-solid);
+  box-sizing: border-box;
+}
+
+.pickups-page .pickups-current-datetime-value strong {
+  color: var(--text-primary);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.pickups-page .pickups-current-datetime-value small {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+@media (max-width: 760px) {
+  .pickups-page .pickups-record-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pickups-page .pickups-current-datetime-value {
+    min-height: 58px;
   }
 }

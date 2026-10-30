@@ -310,6 +310,7 @@ export default function PickupsPage() {
   const [skipDate, setSkipDate] = useState("");
   const [skipSubscriptionId, setSkipSubscriptionId] = useState("");
   const [skipSearch, setSkipSearch] = useState("");
+  const [skipDropdownOpen, setSkipDropdownOpen] = useState(false);
   const [skipSaving, setSkipSaving] = useState(false);
   const [skipHistoryDate, setSkipHistoryDate] = useState("");
   const [showSkipConfirm, setShowSkipConfirm] = useState(false);
@@ -320,6 +321,7 @@ export default function PickupsPage() {
   const [historyDate, setHistoryDate] = useState("");
   const [customerQuery, setCustomerQuery] = useState("");
   const [subscriptionId, setSubscriptionId] = useState("");
+  const [customerDropdownOpen, setCustomerDropdownOpen] = useState(false);
   const [packageMealIds, setPackageMealIds] = useState<string[]>([]);
   const [pickupDate, setPickupDate] = useState("");
   const [pickupTime, setPickupTime] = useState("");
@@ -333,6 +335,8 @@ export default function PickupsPage() {
 
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const loadingRef = useRef(false);
+  const customerAutocompleteRef = useRef<HTMLDivElement>(null);
+  const skipAutocompleteRef = useRef<HTMLDivElement>(null);
 
   const loadData = useCallback(async (showLoader = true) => {
     if (loadingRef.current) return;
@@ -408,12 +412,26 @@ export default function PickupsPage() {
   }, []);
 
   useEffect(() => {
-    const today = getToday();
-    setTodayDate(today);
-    setHistoryDate(today);
-    setPickupDate(today);
-    setPickupTime(getCurrentTime());
+    function updateCurrentDateTime() {
+      const today = getToday();
+
+      setTodayDate(today);
+      setPickupDate(today);
+      setPickupTime(getCurrentTime());
+    }
+
+    updateCurrentDateTime();
+
+    const interval = window.setInterval(updateCurrentDateTime, 10000);
+
+    return () => window.clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (!historyDate && todayDate) {
+      setHistoryDate(todayDate);
+    }
+  }, [todayDate, historyDate]);
 
   useEffect(() => {
     void loadData();
@@ -428,19 +446,53 @@ export default function PickupsPage() {
     };
   }, [loadData]);
 
+  useEffect(() => {
+    function handleOutsideClick(event: PointerEvent) {
+      const target = event.target as Node;
+
+      if (
+        customerAutocompleteRef.current &&
+        !customerAutocompleteRef.current.contains(target)
+      ) {
+        setCustomerDropdownOpen(false);
+      }
+
+      if (
+        skipAutocompleteRef.current &&
+        !skipAutocompleteRef.current.contains(target)
+      ) {
+        setSkipDropdownOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handleOutsideClick);
+
+    return () => {
+      document.removeEventListener("pointerdown", handleOutsideClick);
+    };
+  }, []);
+
   const eligibleSubscriptions = useMemo(() => {
-    return subscriptions.filter(
-      (subscription) =>
+    return subscriptions.filter((subscription) => {
+      const eligible =
         subscription.customer.status === "ACTIVE" &&
         getSubscriptionState(subscription, todayDate) === "ACTIVE" &&
         pickupDate >= subscription.startDate.slice(0, 10) &&
-        pickupDate <= subscription.endDate.slice(0, 10),
-    );
-  }, [subscriptions, pickupDate, todayDate]);
+        pickupDate <= subscription.endDate.slice(0, 10);
+
+      if (!eligible) return false;
+
+      const alreadySkipped = noMealDays.some(
+        (item) =>
+          item.subscriptionId === subscription.id &&
+          item.date.slice(0, 10) === pickupDate,
+      );
+
+      return !alreadySkipped;
+    });
+  }, [subscriptions, pickupDate, todayDate, noMealDays]);
 
   const eligibleSkipSubscriptions = useMemo(() => {
-    const query = normalizeText(skipSearch);
-
     return subscriptions.filter((subscription) => {
       const startDate = subscription.startDate.slice(0, 10);
       const endDate = subscription.endDate.slice(0, 10);
@@ -452,15 +504,6 @@ export default function PickupsPage() {
         skipDate <= endDate;
 
       if (!eligible) return false;
-
-      if (
-        query &&
-        !normalizeText(subscription.customer.name).includes(query) &&
-        !normalizeText(subscription.customer.code).includes(query) &&
-        !normalizeText(subscription.package.name).includes(query)
-      ) {
-        return false;
-      }
 
       const alreadySkipped = noMealDays.some(
         (item) =>
@@ -476,7 +519,24 @@ export default function PickupsPage() {
 
       return !alreadySkipped && !alreadyPickedUp;
     });
-  }, [subscriptions, skipDate, skipSearch, noMealDays, pickups]);
+  }, [subscriptions, skipDate, noMealDays, pickups]);
+
+  const filteredSkipSubscriptions = useMemo(() => {
+    const query = normalizeText(skipSearch);
+
+    if (!query) return eligibleSkipSubscriptions;
+
+    return eligibleSkipSubscriptions.filter(
+      (subscription) =>
+        normalizeText(subscription.customer.name).includes(query) ||
+        normalizeText(subscription.customer.code).includes(query) ||
+        normalizeText(subscription.package.name).includes(query),
+    );
+  }, [eligibleSkipSubscriptions, skipSearch]);
+
+  const skipCustomerSuggestions = skipSubscriptionId
+    ? eligibleSkipSubscriptions
+    : filteredSkipSubscriptions;
 
   const selectedSubscription = subscriptions.find(
     (subscription) => subscription.id === subscriptionId,
@@ -538,6 +598,10 @@ export default function PickupsPage() {
     });
   }, [eligibleSubscriptions, customerQuery]);
 
+  const customerSuggestions = subscriptionId
+  ? eligibleSubscriptions
+  : filteredSubscriptions;
+
   const filteredPickups = useMemo(() => {
     const query = normalizeText(search);
     return pickups.filter((pickup) => {
@@ -579,7 +643,13 @@ export default function PickupsPage() {
   function resetMessages() {}
 
   function selectSubscription(id: string) {
+    const subscription = eligibleSubscriptions.find((item) => item.id === id);
+
+    if (!subscription) return;
+
     setSubscriptionId(id);
+    setCustomerQuery(subscription.customer.name);
+    setCustomerDropdownOpen(false);
     setPackageMealIds([]);
     setPendingVoice(null);
     setVoiceStatus("");
@@ -795,6 +865,19 @@ export default function PickupsPage() {
     setShowVoiceDialog(false);
   }
 
+  function closeVoiceDialog() {
+    recognitionRef.current?.abort();
+    recognitionRef.current = null;
+    setIsListening(false);
+    setShowVoiceDialog(false);
+    setPendingVoice(null);
+    setVoiceStatus("");
+    setCustomerQuery("");
+    setSubscriptionId("");
+    setPackageMealIds([]);
+    setCustomerDropdownOpen(false);
+  }
+
   function handleSavePickup(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     resetMessages();
@@ -972,6 +1055,8 @@ export default function PickupsPage() {
   function resetForm() {
     setCustomerQuery("");
     setSubscriptionId("");
+    setCustomerDropdownOpen(false);
+    setCustomerDropdownOpen(false);
     setPackageMealIds([]);
     setPickupDate(todayDate);
     setPickupTime(getCurrentTime());
@@ -980,11 +1065,6 @@ export default function PickupsPage() {
     setShowConfirm(false);
     resetMessages();
   }
-
-  const subscriptionOptions = filteredSubscriptions.map((s) => ({
-    value: s.id,
-    label: `${s.customer.code} · ${s.customer.name} · ${s.package.name}`,
-  }));
 
   return (
     <main className="subscriptions-page pickups-page">
@@ -1072,96 +1152,105 @@ export default function PickupsPage() {
           </div>
         </div>
 
-        <form onSubmit={handleSavePickup} className="subscriptions-form">
-          <div className="subscriptions-field">
-            <span>Tanggal Pengambilan</span>
-            <DatePicker
-              value={pickupDate}
-              max={todayDate}
-              aria-label="Tanggal pengambilan"
-              onChange={(value) => {
-                setPickupDate(value);
-                setSubscriptionId("");
-                setPackageMealIds([]);
-                setPendingVoice(null);
-                setVoiceStatus("");
-              }}
-            />
-            <small>Hanya tanggal hari ini atau sebelumnya yang diizinkan.</small>
+         <form onSubmit={handleSavePickup} className="subscriptions-form">
+          <div className="subscriptions-field pickups-customer-field">
+            <span>Nama Pelanggan</span>
+
+            <div
+                className="pickups-customer-autocomplete"
+                ref={customerAutocompleteRef}
+            >
+              <input
+                type="text"
+                value={customerQuery}
+                onChange={(event) => {
+                  setCustomerQuery(event.target.value);
+                  setSubscriptionId("");
+                  setPackageMealIds([]);
+                  setPendingVoice(null);
+                  setVoiceStatus("");
+                  setCustomerDropdownOpen(true);
+                }}
+                onFocus={() => setCustomerDropdownOpen(true)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    setCustomerDropdownOpen(false);
+                  }
+
+                  if (event.key === "Enter" && customerDropdownOpen) {
+                    event.preventDefault();
+
+                    if (customerSuggestions.length === 1) {
+                      selectSubscription(customerSuggestions[0].id);
+                    }
+                  }
+                }}
+                placeholder="Cari atau pilih nama pelanggan..."
+                autoComplete="off"
+                role="combobox"
+                aria-expanded={customerDropdownOpen}
+                aria-controls="pickups-customer-options"
+                aria-autocomplete="list"
+              />
+
+              {customerDropdownOpen && (
+                <div
+                  id="pickups-customer-options"
+                  className="pickups-customer-options"
+                  role="listbox"
+                >
+                  {customerSuggestions.length > 0 ? (
+                    customerSuggestions.map((subscription) => (
+                      <button
+                        key={subscription.id}
+                        type="button"
+                        role="option"
+                        aria-selected={subscription.id === subscriptionId}
+                        className={`pickups-customer-option${
+                          subscription.id === subscriptionId ? " is-selected" : ""
+                        }`}
+                        onClick={() => selectSubscription(subscription.id)}
+                      >
+                        <span className="pickups-customer-option-main">
+                          <strong>{subscription.customer.name}</strong>
+                          <small>
+                            {subscription.customer.code} · {subscription.package.name}
+                          </small>
+                        </span>
+
+                        {subscription.id === subscriptionId && (
+                          <span className="pickups-customer-option-check">✓</span>
+                        )}
+                      </button>
+                    ))
+                  ) : (
+                    <div className="pickups-customer-empty">
+                      Tidak ada pelanggan aktif yang cocok pada tanggal tersebut.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <small>
+              Ketik nama atau kode pelanggan, atau klik kolom untuk memilih dari daftar.
+            </small>
           </div>
 
-          <div className="subscriptions-field pickups-time-field">
-            <span>Waktu Pengambilan</span>
-
-            <div className="pickups-time-picker">
-              <div className="pickups-time-unit">
-                <span>Jam</span>
-                <Select
-                  value={pickupTime.split(":")[0] || "00"}
-                  onChange={(hour) => {
-                    const minute = pickupTime.split(":")[1] || "00";
-                    setPickupTime(`${hour}:${minute}`);
-                  }}
-                  options={Array.from({ length: 24 }, (_, hour) => {
-                    const value = String(hour).padStart(2, "0");
-                    return { value, label: value };
-                  })}
-                  aria-label="Jam pengambilan"
-                  className="pickups-time-select"
-                />
-              </div>
-
-              <span className="pickups-time-separator">:</span>
-
-              <div className="pickups-time-unit">
-                <span>Menit</span>
-                <Select
-                  value={pickupTime.split(":")[1] || "00"}
-                  onChange={(minute) => {
-                    const hour = pickupTime.split(":")[0] || "00";
-                    setPickupTime(`${hour}:${minute}`);
-                  }}
-                  options={Array.from({ length: 60 }, (_, minute) => {
-                    const value = String(minute).padStart(2, "0");
-                    return { value, label: value };
-                  })}
-                  aria-label="Menit pengambilan"
-                  className="pickups-time-select"
-                />
-              </div>
+          <div className="subscriptions-field pickups-current-datetime">
+            <span>Tanggal Pengambilan</span>
+            <div className="pickups-current-datetime-value">
+              <strong>{pickupDate ? formatDate(pickupDate) : "Memuat..."}</strong>
+              <small>Otomatis mengikuti tanggal hari ini</small>
             </div>
           </div>
 
-          <label className="subscriptions-field">
-            <span>Cari Pelanggan</span>
-            <input
-              type="search"
-              value={customerQuery}
-              onChange={(event) => {
-                setCustomerQuery(event.target.value);
-                setSubscriptionId("");
-                setPackageMealIds([]);
-                setPendingVoice(null);
-                setVoiceStatus("");
-              }}
-              placeholder="Nama atau kode pelanggan..."
-            />
-          </label>
-
-          <div className="subscriptions-field">
-            <span>Pelanggan dan Langganan</span>
-            <Select
-              value={subscriptionId}
-              onChange={selectSubscription}
-              options={subscriptionOptions}
-              placeholder="Pilih pelanggan"
-              aria-label="Pelanggan dan langganan"
-            />
-            {filteredSubscriptions.length === 0 && (
-              <small>
-                Tidak ada langganan aktif yang cocok pada tanggal tersebut.
-              </small>
-            )}
+          <div className="subscriptions-field pickups-current-datetime">
+            <span>Waktu Pengambilan</span>
+            <div className="pickups-current-datetime-value">
+              <strong>{pickupTime || "Memuat..."}</strong>
+              <small>Diperbarui secara otomatis</small>
+            </div>
           </div>
 
           {selectedSubscription && (
@@ -1331,42 +1420,95 @@ export default function PickupsPage() {
               onChange={(value) => {
                 setSkipDate(value);
                 setSkipSubscriptionId("");
+                setSkipSearch("");
+                setSkipDropdownOpen(false);
               }}
             />
           </div>
 
-          <label className="subscriptions-field">
-            <span>Cari Pelanggan</span>
+          <div className="subscriptions-field pickups-customer-field">
+          <span>Nama Pelanggan</span>
+
+          <div
+            className="pickups-customer-autocomplete"
+            ref={skipAutocompleteRef}
+          >
             <input
-              type="search"
+              type="text"
               value={skipSearch}
               onChange={(event) => {
                 setSkipSearch(event.target.value);
                 setSkipSubscriptionId("");
+                setSkipDropdownOpen(true);
               }}
-              placeholder="Nama, kode, atau paket pelanggan..."
-            />
-          </label>
+              onFocus={() => setSkipDropdownOpen(true)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  setSkipDropdownOpen(false);
+                }
 
-          <div className="subscriptions-field">
-            <span>Pelanggan dan Langganan</span>
-            <Select
-              value={skipSubscriptionId}
-              onChange={setSkipSubscriptionId}
-              options={eligibleSkipSubscriptions.map((subscription) => ({
-                value: subscription.id,
-                label: `${subscription.customer.code} · ${subscription.customer.name} · ${subscription.package.name}`,
-              }))}
-              placeholder="Pilih pelanggan"
-              aria-label="Pelanggan yang tidak mengambil makanan"
+                if (event.key === "Enter" && skipDropdownOpen) {
+                  event.preventDefault();
+
+                  if (skipCustomerSuggestions.length === 1) {
+                    const subscription = skipCustomerSuggestions[0];
+                    setSkipSubscriptionId(subscription.id);
+                    setSkipSearch(subscription.customer.name);
+                    setSkipDropdownOpen(false);
+                  }
+                }
+              }}
+              placeholder="Cari atau pilih nama pelanggan..."
+              autoComplete="off"
+              role="combobox"
+              aria-expanded={skipDropdownOpen}
             />
 
-            {skipDate && eligibleSkipSubscriptions.length === 0 && (
-              <small>
-                Tidak ada langganan yang memenuhi syarat pada tanggal tersebut.
-              </small>
+            {skipDropdownOpen && (
+              <div className="pickups-customer-options" role="listbox">
+                {skipCustomerSuggestions.length > 0 ? (
+                  skipCustomerSuggestions.map((subscription) => (
+                    <button
+                      key={subscription.id}
+                      type="button"
+                      role="option"
+                      aria-selected={subscription.id === skipSubscriptionId}
+                      className={`pickups-customer-option${
+                        subscription.id === skipSubscriptionId ? " is-selected" : ""
+                      }`}
+                      onClick={() => {
+                        setSkipSubscriptionId(subscription.id);
+                        setSkipSearch(subscription.customer.name);
+                        setSkipDropdownOpen(false);
+                      }}
+                    >
+                      <span className="pickups-customer-option-main">
+                        <strong>{subscription.customer.name}</strong>
+                        <small>
+                          {subscription.customer.code} · {subscription.package.name}
+                        </small>
+                      </span>
+
+                      {subscription.id === skipSubscriptionId && (
+                        <span className="pickups-customer-option-check">✓</span>
+                      )}
+                    </button>
+                  ))
+                ) : (
+                  <div className="pickups-customer-empty">
+                    {skipDate
+                      ? "Tidak ada pelanggan aktif yang memenuhi syarat pada tanggal tersebut."
+                      : "Pilih tanggal terlebih dahulu."}
+                  </div>
+                )}
+              </div>
             )}
           </div>
+
+          <small>
+            Ketik nama atau kode pelanggan, atau klik kolom untuk memilih dari daftar.
+          </small>
+        </div>
 
           <div className="subscriptions-form-actions">
             <button
@@ -1376,6 +1518,7 @@ export default function PickupsPage() {
               onClick={() => {
                 setSkipSubscriptionId("");
                 setSkipSearch("");
+                setSkipDropdownOpen(false);
               }}
             >
               Reset Form
@@ -1397,7 +1540,6 @@ export default function PickupsPage() {
         </form>
       </section>
 
-      {/* Riwayat Pengambilan */}
       <section className="subscriptions-list-panel panel">
         <div className="subscriptions-section-heading">
           <div>
@@ -1538,7 +1680,6 @@ export default function PickupsPage() {
         )}
       </section>
 
-      {/* Riwayat Tidak Ambil */}
       <section className="subscriptions-list-panel panel">
         <div className="subscriptions-section-heading">
           <div>
@@ -1757,7 +1898,7 @@ export default function PickupsPage() {
 
       <Dialog
         open={showVoiceDialog}
-        onClose={stopVoiceRecognition}
+        onClose={closeVoiceDialog}
         title="Input Suara"
         description="Sebutkan kode pelanggan dan nama lauk yang diambil."
         icon="🎙"
@@ -1806,7 +1947,7 @@ export default function PickupsPage() {
             <button
               type="button"
               className="subscriptions-primary-button"
-              onClick={stopVoiceRecognition}
+              onClick={closeVoiceDialog}
             >
               Berhenti
             </button>
@@ -1815,7 +1956,7 @@ export default function PickupsPage() {
               <button
                 type="button"
                 className="subscriptions-secondary-button"
-                onClick={stopVoiceRecognition}
+                onClick={closeVoiceDialog}
               >
                 Tutup
               </button>

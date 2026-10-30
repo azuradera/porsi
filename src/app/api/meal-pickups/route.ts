@@ -317,7 +317,9 @@ export async function POST(request: Request) {
         };
       },
       {
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          maxWait: 10000,
+          timeout: 15000,
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
       },
     );
 
