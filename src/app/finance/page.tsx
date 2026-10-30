@@ -283,33 +283,65 @@ export default function FinancePage() {
   }, [transactions, activeTab, search]);
 
   const handleExport = () => {
-    const header = ["Tanggal", "Jenis", "Deskripsi", "Kategori", "Nominal", "Detail"];
+    const keyword = search.trim().toLowerCase();
 
-    const rows = filteredTransactions.map((t) => [
-      t.date.slice(0, 10),
-      t.type === "income" ? "Pemasukan" : "Pengeluaran",
-      t.description,
-      t.category,
-      t.amount,
-      t.detail,
+    const exportPayments = payments.filter((payment) => {
+      return (
+        !keyword ||
+        payment.customerName.toLowerCase().includes(keyword) ||
+        payment.customerCode.toLowerCase().includes(keyword) ||
+        payment.packageName.toLowerCase().includes(keyword) ||
+        (payment.method ?? "").toLowerCase().includes(keyword) ||
+        (payment.notes ?? "").toLowerCase().includes(keyword)
+      );
+    });
+
+    if (exportPayments.length === 0) {
+      toast.error("Tidak ada data pemasukan untuk diekspor");
+      return;
+    }
+
+    const header = [
+      "Tanggal",
+      "ID Pelanggan",
+      "Nama Pelanggan",
+      "Paket",
+      "Nominal",
+      "Metode Pembayaran",
+      "Keterangan",
+    ];
+
+    const rows = exportPayments.map((payment) => [
+      payment.paymentDate.slice(0, 10),
+      payment.customerCode,
+      payment.customerName,
+      payment.packageName,
+      Number(payment.amount),
+      payment.method || "Tidak dicantumkan",
+      payment.notes || "Pembayaran langganan",
     ]);
 
     const escapeCsv = (value: string | number) =>
       `"${String(value).replace(/"/g, '""')}"`;
 
     const csv = [header, ...rows]
-      .map((row) => row.map(escapeCsv).join(","))
+      .map((row) => row.map(escapeCsv).join(";"))
       .join("\r\n");
 
-    const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8;" });
+    const blob = new Blob(["\uFEFF", csv], {
+      type: "text/csv;charset=utf-8;",
+    });
+
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
 
     link.href = url;
-    link.download = `laporan-keuangan-${month}.csv`;
+    link.download = `laporan-pemasukan-${month}.csv`;
+
     document.body.appendChild(link);
     link.click();
     link.remove();
+
     URL.revokeObjectURL(url);
   };
 
