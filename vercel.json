@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/internal/subscription-days",
+      "schedule": "0 17 * * *"
+    }
+  ]
+}
