@@ -17,10 +17,7 @@ async function lockSubscription(
 }
 
 function parsePickupTime(value: string) {
-  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) {
-    return null;
-  }
-
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) return null;
   return new Date(`1970-01-01T${value}:00.000Z`);
 }
 
@@ -37,9 +34,7 @@ function isPrismaError(
 export async function GET(request: Request) {
   const auth = await requireAdmin(request);
 
-  if (auth) {
-    return auth;
-  }
+  if (auth) return auth;
 
   try {
     const { searchParams } = new URL(request.url);
@@ -52,10 +47,7 @@ export async function GET(request: Request) {
         where.pickupDate = parseBusinessDate(date);
       } catch {
         return NextResponse.json(
-          {
-            message:
-              "Tanggal harus valid dengan format YYYY-MM-DD",
-          },
+          { message: "Tanggal harus valid dengan format YYYY-MM-DD" },
           { status: 400 },
         );
       }
@@ -90,18 +82,12 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const auth = await requireAdmin(request);
 
-  if (auth) {
-    return auth;
-  }
+  if (auth) return auth;
 
   try {
     const body: unknown = await request.json().catch(() => null);
 
-    if (
-      !body ||
-      typeof body !== "object" ||
-      Array.isArray(body)
-    ) {
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
       return NextResponse.json(
         { message: "Data permintaan tidak valid" },
         { status: 400 },
@@ -115,35 +101,40 @@ export async function POST(request: Request) {
         ? data.subscriptionId.trim()
         : "";
 
-    const packageMealId =
-      typeof data.packageMealId === "string"
-        ? data.packageMealId.trim()
-        : "";
+    const packageMealIds = Array.isArray(data.packageMealIds)
+      ? data.packageMealIds
+      : typeof data.packageMealId === "string"
+        ? [data.packageMealId]
+        : [];
 
     const pickupDate =
-      typeof data.pickupDate === "string"
-        ? data.pickupDate
-        : "";
+      typeof data.pickupDate === "string" ? data.pickupDate : "";
 
     const pickupTime =
-      typeof data.pickupTime === "string"
-        ? data.pickupTime
-        : "";
-
-    const quantity =
-      data.quantity === undefined ? 1 : data.quantity;
+      typeof data.pickupTime === "string" ? data.pickupTime : "";
 
     if (
       !subscriptionId ||
-      !packageMealId ||
+      !packageMealIds.length ||
+      !packageMealIds.every(
+        (id) => typeof id === "string" && id.trim().length > 0,
+      ) ||
       !pickupDate ||
       !pickupTime
     ) {
       return NextResponse.json(
-        {
-          message:
-            "Langganan, lauk, tanggal, dan waktu wajib diisi",
-        },
+        { message: "Langganan, lauk, tanggal, dan waktu wajib diisi" },
+        { status: 400 },
+      );
+    }
+
+    const uniqueMealIds = [...new Set(
+      packageMealIds.map((id) => (id as string).trim()),
+    )];
+
+    if (uniqueMealIds.length !== packageMealIds.length) {
+      return NextResponse.json(
+        { message: "Menu yang sama tidak boleh dipilih lebih dari sekali" },
         { status: 400 },
       );
     }
@@ -163,10 +154,7 @@ export async function POST(request: Request) {
 
     if (parsedDate > today) {
       return NextResponse.json(
-        {
-          message:
-            "Tanggal pengambilan tidak boleh di masa depan",
-        },
+        { message: "Tanggal pengambilan tidak boleh di masa depan" },
         { status: 400 },
       );
     }
@@ -180,20 +168,6 @@ export async function POST(request: Request) {
       );
     }
 
-    if (
-      typeof quantity !== "number" ||
-      !Number.isSafeInteger(quantity) ||
-      quantity < 1
-    ) {
-      return NextResponse.json(
-        {
-          message:
-            "Jumlah pengambilan harus berupa bilangan bulat positif",
-        },
-        { status: 400 },
-      );
-    }
-
     const result = await prisma.$transaction(
       async (tx) => {
         await lockSubscription(tx, subscriptionId);
@@ -202,13 +176,15 @@ export async function POST(request: Request) {
           where: { id: subscriptionId },
           include: {
             customer: true,
-            package: true,
+            package: {
+              include: {
+                meals: true,
+              },
+            },
           },
         });
 
-        if (!subscription) {
-          throw new Error("SUBSCRIPTION_NOT_FOUND");
-        }
+        if (!subscription) throw new Error("SUBSCRIPTION_NOT_FOUND");
 
         if (subscription.customer.status !== "ACTIVE") {
           throw new Error("CUSTOMER_INACTIVE");
@@ -251,19 +227,42 @@ export async function POST(request: Request) {
           },
         });
 
-        if (noMealDay) {
-          throw new Error("NO_MEAL_DAY_RECORDED");
+        if (noMealDay) throw new Error("NO_MEAL_DAY_RECORDED");
+
+        if (uniqueMealIds.length > subscription.package.meals.length) {
+          throw new Error("TOO_MANY_MEALS");
         }
 
-        const packageMeal = await tx.packageMeal.findUnique({
-          where: { id: packageMealId },
+        const packageMeals = await tx.packageMeal.findMany({
+          where: {
+            id: { in: uniqueMealIds },
+            packageId: subscription.packageId,
+          },
         });
 
-        if (
-          !packageMeal ||
-          packageMeal.packageId !== subscription.packageId
-        ) {
+        if (packageMeals.length !== uniqueMealIds.length) {
           throw new Error("MEAL_NOT_IN_PACKAGE");
+        }
+
+        const existingMealPickups = await tx.mealPickup.findMany({
+          where: {
+            subscriptionId,
+            pickupDate: parsedDate,
+            packageMealId: {
+              in: uniqueMealIds,
+            },
+          },
+          include: {
+            packageMeal: true,
+          },
+        });
+
+        if (existingMealPickups.length > 0) {
+          const mealNames = existingMealPickups
+            .map((pickup) => pickup.packageMeal.mealName)
+            .join(", ");
+
+          throw new Error(`MEAL_ALREADY_TAKEN:${mealNames}`);
         }
 
         const dailyPickups = await tx.mealPickup.aggregate({
@@ -276,62 +275,62 @@ export async function POST(request: Request) {
           },
         });
 
-        const currentQuantity =
-          dailyPickups._sum.quantity ?? 0;
+        const currentQuantity = dailyPickups._sum.quantity ?? 0;
+        const requestedQuantity = uniqueMealIds.length;
 
         if (
-          currentQuantity + quantity >
+          currentQuantity + requestedQuantity >
           subscription.package.dailyQuota
         ) {
           throw new Error("DAILY_QUOTA_EXCEEDED");
         }
 
-        const pickup = await tx.mealPickup.create({
-          data: {
-            subscriptionId,
-            packageMealId,
-            pickupDate: parsedDate,
-            pickupTime: parsedTime,
-            quantity,
-          },
-          include: {
-            packageMeal: true,
-            subscription: {
-              include: {
-                customer: true,
-                package: true,
+        const pickups = await Promise.all(
+          uniqueMealIds.map((packageMealId) =>
+            tx.mealPickup.create({
+              data: {
+                subscriptionId,
+                packageMealId,
+                pickupDate: parsedDate,
+                pickupTime: parsedTime,
+                quantity: 1,
               },
-            },
-          },
-        });
+              include: {
+                packageMeal: true,
+                subscription: {
+                  include: {
+                    customer: true,
+                    package: true,
+                  },
+                },
+              },
+            }),
+          ),
+        );
 
         return {
-          pickup,
+          pickups,
           remainingQuota:
             subscription.package.dailyQuota -
             currentQuantity -
-            quantity,
+            requestedQuantity,
         };
       },
       {
-        isolationLevel:
-          Prisma.TransactionIsolationLevel.Serializable,
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
       },
     );
 
     return NextResponse.json(
       {
-        message: "Pengambilan makanan berhasil dicatat",
+        message: `${result.pickups.length} lauk berhasil dicatat`,
         ...result,
       },
       { status: 201 },
     );
   } catch (error) {
     if (error instanceof Error) {
-      const errors: Record<
-        string,
-        { message: string; status: number }
-      > = {
+      const errors: Record<string, { message: string; status: number }> = {
         SUBSCRIPTION_NOT_FOUND: {
           message: "Langganan tidak ditemukan",
           status: 404,
@@ -345,34 +344,44 @@ export async function POST(request: Request) {
           status: 409,
         },
         OUTSIDE_SUBSCRIPTION_PERIOD: {
-          message:
-            "Tanggal pengambilan berada di luar masa langganan",
+          message: "Tanggal pengambilan berada di luar masa langganan",
           status: 409,
         },
         PICKUP_DATE_ALREADY_PROCESSED: {
-          message:
-            "Tanggal pengambilan sudah selesai diproses",
+          message: "Tanggal pengambilan sudah selesai diproses",
           status: 409,
         },
         PICKUP_DATE_PROCESSING: {
-          message:
-            "Tanggal pengambilan sedang diproses sistem",
+          message: "Tanggal pengambilan sedang diproses sistem",
           status: 409,
         },
         MEAL_NOT_IN_PACKAGE: {
           message: "Lauk tidak tersedia dalam paket pelanggan",
           status: 400,
         },
+        TOO_MANY_MEALS: {
+          message: "Jumlah lauk melebihi isi paket pelanggan",
+          status: 400,
+        },
         DAILY_QUOTA_EXCEEDED: {
-          message:
-            "Kuota pengambilan harian sudah tidak mencukupi",
+          message: "Kuota pengambilan harian sudah tidak mencukupi",
           status: 409,
         },
         NO_MEAL_DAY_RECORDED: {
-        message: "Tanggal tersebut sudah ditandai Tidak Ambil",
-        status: 409,
+          message: "Tanggal tersebut sudah ditandai Tidak Ambil",
+          status: 409,
         },
       };
+      if (error.message.startsWith("MEAL_ALREADY_TAKEN:")) {
+        const mealNames = error.message.replace("MEAL_ALREADY_TAKEN:", "");
+
+        return NextResponse.json(
+          {
+            message: `${mealNames} sudah diambil pada tanggal tersebut. Pilih lauk lain.`,
+          },
+          { status: 409 },
+        );
+      }
 
       const knownError = errors[error.message];
 
@@ -389,13 +398,12 @@ export async function POST(request: Request) {
       isPrismaError(error, "P2002")
     ) {
       return NextResponse.json(
-        {
-          message:
-            "Terjadi konflik transaksi. Silakan ulangi permintaan.",
-        },
+        { message: "Terjadi konflik transaksi. Silakan ulangi permintaan." },
         { status: 409 },
       );
     }
+
+    console.error("POST /api/meal-pickups error:", error);
 
     return NextResponse.json(
       { message: "Gagal mencatat pengambilan makanan" },

@@ -7155,3 +7155,123 @@ textarea::placeholder,
     flex: 1 1 0;
   }
 }
+
+
+/* ===== Pilihan lauk: kartu checkbox ===== */
+.pickups-meal-field {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.pickups-meal-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.pickups-meal-heading small {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+
+.pickups-meal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-2);
+  margin-top: 6px;
+}
+
+.pickups-meal-card {
+  display: flex;
+  min-height: 60px;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-solid);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease;
+}
+
+.pickups-meal-card:hover:not(:disabled) {
+  border-color: var(--sky-primary);
+  background: var(--sky-panel);
+}
+
+.pickups-meal-card:focus-visible {
+  outline: 2px solid var(--sky-primary);
+  outline-offset: 2px;
+}
+
+.pickups-meal-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.pickups-meal-card.is-checked {
+  border-color: var(--sky-primary);
+  background: var(--sky-soft);
+  box-shadow: 0 0 0 2px rgba(47, 111, 179, 0.15);
+}
+
+.pickups-meal-card.is-taken {
+  background: #EDF1F6;
+}
+
+.pickups-meal-check {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  place-items: center;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--surface-solid);
+  color: transparent;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.pickups-meal-card.is-checked .pickups-meal-check {
+  border-color: var(--sky-primary);
+  background: var(--sky-primary);
+  color: #FFFFFF;
+}
+
+.pickups-meal-name {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-heading);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.pickups-meal-status {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+
+@media (min-width: 481px) and (max-width: 760px) {
+  .pickups-meal-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .pickups-meal-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .pickups-meal-card {
+    min-height: 56px;
+    padding: 12px;
+  }
+}

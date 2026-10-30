@@ -7,9 +7,9 @@ import LogoutButton from "@/components/logout-button";
 
 const navigation = [
   { href: "/", label: "Dashboard", icon: "dashboard" },
+  { href: "/pickups", label: "Pengambilan", icon: "pickups" },
   { href: "/customers", label: "Pelanggan", icon: "customers" },
   { href: "/packages", label: "Paket", icon: "packages" },
-  { href: "/pickups", label: "Pengambilan", icon: "pickups" },
   { href: "/finance", label: "Keuangan", icon: "finance" },
 ];
 

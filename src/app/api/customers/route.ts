@@ -9,18 +9,11 @@ import {
   parseBusinessDate,
 } from "@/lib/date";
 
-function generateCustomerCode(name: string) {
-  const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  const first = characters[randomInt(characters.length)];
-  const second = characters[randomInt(characters.length)];
-  const namePrefix = name
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-zA-Z]/g, "")
-    .slice(0, 2)
-    .toLowerCase();
+function generateCustomerCode() {
+  const letter = String.fromCharCode(65 + randomInt(26));
+  const numbers = String(randomInt(100)).padStart(2, "0");
 
-  return `${first}${second}${namePrefix}`;
+  return `${letter}${numbers}`;
 }
 
 function isPrismaError(
@@ -264,7 +257,7 @@ export async function POST(request: NextRequest) {
     }
 
     for (let attempt = 0; attempt < 5; attempt++) {
-      const code = generateCustomerCode(name);
+      const code = generateCustomerCode();
 
       try {
         const result = await prisma.$transaction(

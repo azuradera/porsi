@@ -86,8 +86,7 @@ type ApiResponse<T> = {
 
 type RecognitionResult = {
   customerQuery: string;
-  mealQuery: string;
-  quantity: number;
+  mealQueries: string[];
 };
 
 type SpeechRecognitionAlternative = { transcript: string };
@@ -163,104 +162,113 @@ function normalizeText(value: string) {
     .trim();
 }
 
-function parseIndonesianNumber(value: string) {
-  const normalized = normalizeText(value);
-  const digits: Record<string, number> = {
-    satu: 1, dua: 2, tiga: 3, empat: 4, lima: 5,
-    enam: 6, tujuh: 7, delapan: 8, sembilan: 9, sepuluh: 10,
-  };
-  if (/^\d+$/.test(normalized)) return Number(normalized);
-  return digits[normalized] ?? null;
-}
 
 function parseVoiceCommand(transcript: string): RecognitionResult | null {
   const normalized = normalizeText(transcript);
   if (!normalized) return null;
 
-  const tokens = normalized.split(/\s+/);
+  const commandTokens = normalized
+    .replace(/\b(kode pelanggan|kode|pelanggan)\b/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
 
-  const numberWords: Record<string, number> = {
-    satu: 1,
-    dua: 2,
-    tiga: 3,
-    empat: 4,
-    lima: 5,
-    enam: 6,
-    tujuh: 7,
-    delapan: 8,
-    sembilan: 9,
-    sepuluh: 10,
+  let customerQuery = "";
+  let codeStart = -1;
+  let codeEnd = -1;
+
+  const digitWords: Record<string, string> = {
+    nol: "0",
+    kosong: "0",
+    satu: "1",
+    dua: "2",
+    tiga: "3",
+    empat: "4",
+    lima: "5",
+    enam: "6",
+    tujuh: "7",
+    delapan: "8",
+    sembilan: "9",
   };
 
-  const quantityToken = tokens[tokens.length - 1];
-  const quantity = /^\d+$/.test(quantityToken)
-    ? Number(quantityToken)
-    : numberWords[quantityToken];
-
-  if (!quantity || quantity < 1 || quantity > 100) return null;
-
-  const commandTokens = tokens.slice(0, -1);
-  let customerQuery = "";
-  let codeEndIndex = -1;
+  const letterWords: Record<string, string> = {
+    a: "A",
+    be: "B",
+    ce: "C",
+    de: "D",
+    e: "E",
+    ef: "F",
+    ge: "G",
+    ha: "H",
+    i: "I",
+    je: "J",
+    ka: "K",
+    el: "L",
+    em: "M",
+    en: "N",
+    o: "O",
+    pe: "P",
+    ki: "Q",
+    er: "R",
+    es: "S",
+    te: "T",
+    u: "U",
+    ve: "V",
+    we: "W",
+    eks: "X",
+    ye: "Y",
+    zet: "Z",
+  };
 
   for (let i = 0; i < commandTokens.length; i++) {
-    const combined = commandTokens.slice(i, i + 6).join("");
-    const match = combined.match(/^([a-z]{2})((?:\d\s*){4})$/i);
+    const token = commandTokens[i].toUpperCase();
+    const directMatch = token.match(/^([A-Z])(\d{2})$/);
 
-    if (match) {
-      customerQuery = `${match[1]}${match[2].replace(/\s/g, "")}`.toUpperCase();
-      codeEndIndex = i + 6;
+    if (directMatch) {
+      customerQuery = directMatch[0];
+      codeStart = i;
+      codeEnd = i + 1;
       break;
     }
 
-    const singleTokenMatch = commandTokens[i].match(/^([a-z]{2})(\d{4})$/i);
-
-    if (singleTokenMatch) {
-      customerQuery = commandTokens[i].toUpperCase();
-      codeEndIndex = i + 1;
+    if (/^[A-Z]$/.test(token) && /^\d{2}$/.test(commandTokens[i + 1] ?? "")) {
+      customerQuery = `${token}${commandTokens[i + 1]}`;
+      codeStart = i;
+      codeEnd = i + 2;
       break;
     }
 
-    const spacedMatch = commandTokens.slice(i, i + 2).join("").match(/^([a-z]{2})(\d{4})$/i);
+    const letter = letterWords[commandTokens[i]];
+    const firstDigit = digitWords[commandTokens[i + 1] ?? ""];
+    const secondDigit = digitWords[commandTokens[i + 2] ?? ""];
 
-    if (spacedMatch) {
-      customerQuery = spacedMatch[0].toUpperCase();
-      codeEndIndex = i + 2;
+    if (letter && firstDigit !== undefined && secondDigit !== undefined) {
+      customerQuery = `${letter}${firstDigit}${secondDigit}`;
+      codeStart = i;
+      codeEnd = i + 3;
       break;
     }
   }
 
-  if (!customerQuery) {
-    const compact = commandTokens.join("");
-    const match = compact.match(/([a-z]{2}\d{4})/i);
+  if (!customerQuery) return null;
 
-    if (!match) return null;
+  const mealText = commandTokens
+    .filter((_, index) => index < codeStart || index >= codeEnd)
+    .join(" ")
+    .trim();
 
-    customerQuery = match[1].toUpperCase();
-    const codeCharacters = match.index! + match[1].length;
-    let characters = 0;
+  if (!mealText) return null;
 
-    for (let i = 0; i < commandTokens.length; i++) {
-      characters += commandTokens[i].length;
+  const mealQueries = mealText
+    .split(/\s+(?:dan|lalu|kemudian)\s+|,\s*/)
+    .map((meal) => normalizeText(meal))
+    .filter(Boolean);
 
-      if (characters >= codeCharacters) {
-        codeEndIndex = i + 1;
-        break;
-      }
-    }
-  }
+  if (!mealQueries.length) return null;
 
-  const mealTokens = commandTokens.filter((_, index) => {
-    if (codeEndIndex < 0) return true;
-    return index >= codeEndIndex;
-  });
-
-  const mealQuery = mealTokens.join(" ").trim();
-
-  if (!mealQuery) return null;
-
-  return { customerQuery, mealQuery, quantity };
+  return { customerQuery, mealQueries };
 }
+
 
 function getSubscriptionState(subscription: Subscription, today: string) {
   const start = subscription.startDate.slice(0, 10);
@@ -294,6 +302,7 @@ function getErrorMessage(data: unknown, fallback: string) {
   return fallback;
 }
 
+
 export default function PickupsPage() {
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [pickups, setPickups] = useState<Pickup[]>([]);
@@ -311,10 +320,9 @@ export default function PickupsPage() {
   const [historyDate, setHistoryDate] = useState("");
   const [customerQuery, setCustomerQuery] = useState("");
   const [subscriptionId, setSubscriptionId] = useState("");
-  const [packageMealId, setPackageMealId] = useState("");
+  const [packageMealIds, setPackageMealIds] = useState<string[]>([]);
   const [pickupDate, setPickupDate] = useState("");
   const [pickupTime, setPickupTime] = useState("");
-  const [quantity, setQuantity] = useState(1);
   const [voiceStatus, setVoiceStatus] = useState("");
   const [isListening, setIsListening] = useState(false);
   const [showVoiceDialog, setShowVoiceDialog] = useState(false);
@@ -470,13 +478,13 @@ export default function PickupsPage() {
     });
   }, [subscriptions, skipDate, skipSearch, noMealDays, pickups]);
 
-  const selectedSubscription = subscriptions.find((s) => s.id === subscriptionId);
-  const selectedMeal = selectedSubscription?.package.meals.find(
-    (meal) => meal.id === packageMealId,
+  const selectedSubscription = subscriptions.find(
+    (subscription) => subscription.id === subscriptionId,
   );
 
   const dailyQuantity = useMemo(() => {
     if (!subscriptionId || !pickupDate) return 0;
+
     return pickups.reduce((total, pickup) => {
       if (
         pickup.subscriptionId === subscriptionId &&
@@ -484,13 +492,39 @@ export default function PickupsPage() {
       ) {
         return total + Number(pickup.quantity);
       }
+
       return total;
     }, 0);
   }, [pickups, subscriptionId, pickupDate]);
 
   const remainingQuota = selectedSubscription
-    ? Math.max(0, selectedSubscription.package.dailyQuota - dailyQuantity)
+    ? Math.max(
+        0,
+        selectedSubscription.package.dailyQuota - dailyQuantity,
+      )
     : 0;
+
+  const selectedMeals =
+    selectedSubscription?.package.meals.filter((meal) =>
+      packageMealIds.includes(meal.id),
+    ) ?? [];
+
+  const takenMealIds = useMemo(() => {
+    if (!subscriptionId || !pickupDate) return [];
+
+    return pickups
+      .filter(
+        (pickup) =>
+          pickup.subscriptionId === subscriptionId &&
+          getPickupDate(pickup.pickupDate) === pickupDate,
+      )
+      .map((pickup) => pickup.packageMealId);
+  }, [pickups, subscriptionId, pickupDate]);
+
+  const availableMealOptions =
+    selectedSubscription?.package.meals.filter(
+      (meal) => !takenMealIds.includes(meal.id),
+    ) ?? [];
 
   const filteredSubscriptions = useMemo(() => {
     const query = normalizeText(customerQuery);
@@ -546,9 +580,19 @@ export default function PickupsPage() {
 
   function selectSubscription(id: string) {
     setSubscriptionId(id);
-    setPackageMealId("");
+    setPackageMealIds([]);
     setPendingVoice(null);
     setVoiceStatus("");
+  }
+
+  function toggleMeal(mealId: string) {
+    setPackageMealIds((current) => {
+      if (current.includes(mealId)) {
+        return current.filter((id) => id !== mealId);
+      }
+      return current.length < remainingQuota ? [...current, mealId] : current;
+    });
+    setPendingVoice(null);
   }
 
   function applyVoiceResult(result: RecognitionResult) {
@@ -566,6 +610,7 @@ export default function PickupsPage() {
           normalizeText(s.customer.code) === query ||
           normalizeText(s.customer.name) === query,
       );
+
       setVoiceStatus(
         knownCandidates.length > 0
           ? "Pelanggan ditemukan, tetapi langganannya tidak aktif pada tanggal yang dipilih."
@@ -584,36 +629,50 @@ export default function PickupsPage() {
     }
 
     const customer = activeCandidates[0];
-    const mealQuery = normalizeText(result.mealQuery);
+    const matchedMeals: Meal[] = [];
 
-    const exactMeals = customer.package.meals.filter(
-      (meal) => normalizeText(meal.mealName) === mealQuery,
-    );
-
-    let meal: Meal | undefined;
-
-    if (exactMeals.length === 1) {
-      meal = exactMeals[0];
-    } else if (exactMeals.length > 1) {
-      setVoiceStatus(
-        "Nama menu cocok dengan lebih dari satu pilihan. Pilih menu secara manual.",
-      );
-      setPendingVoice(null);
-      return;
-    } else {
-      const partialMeals = customer.package.meals.filter((item) => {
-        const mealName = normalizeText(item.mealName);
-        return mealName.includes(mealQuery) || mealQuery.includes(mealName);
+    for (const mealQuery of result.mealQueries) {
+      const matches = customer.package.meals.filter((meal) => {
+        const baseMealName = normalizeText(meal.mealName.split(/\s+dan\s+/i)[0]);
+        return (
+          baseMealName === mealQuery ||
+          baseMealName.includes(mealQuery) ||
+          mealQuery.includes(baseMealName)
+        );
       });
-      if (partialMeals.length === 1) meal = partialMeals[0];
-    }
 
-    if (!meal) {
-      setVoiceStatus(
-        `Menu "${result.mealQuery}" tidak cocok secara pasti dengan menu paket. Pilih menu secara manual.`,
+      if (matches.length !== 1) {
+        setVoiceStatus(
+          `Menu "${mealQuery}" tidak cocok secara pasti dengan lauk dalam paket pelanggan.`,
+        );
+        setPendingVoice(null);
+        return;
+      }
+
+      if (matchedMeals.some((meal) => meal.id === matches[0].id)) {
+        setVoiceStatus("Lauk yang sama disebutkan lebih dari satu kali.");
+        setPendingVoice(null);
+        return;
+      }
+
+      matchedMeals.push(matches[0]);
+
+      const alreadyTakenMeal = matchedMeals.find((meal) =>
+        pickups.some(
+          (pickup) =>
+            pickup.subscriptionId === customer.id &&
+            pickup.packageMealId === meal.id &&
+            getPickupDate(pickup.pickupDate) === pickupDate,
+        ),
       );
-      setPendingVoice(null);
-      return;
+
+      if (alreadyTakenMeal) {
+        setVoiceStatus(
+          `${alreadyTakenMeal.mealName} sudah diambil hari ini. Silakan sebutkan menu lain.`,
+        );
+        setPendingVoice(null);
+        return;
+      }
     }
 
     const usedQuota = pickups.reduce((total, pickup) => {
@@ -626,29 +685,32 @@ export default function PickupsPage() {
       return total;
     }, 0);
 
-    const availableQuota = Math.max(0, customer.package.dailyQuota - usedQuota);
+    const availableQuota = Math.max(
+      0,
+      customer.package.dailyQuota - usedQuota,
+    );
 
-    if (availableQuota < 1) {
-      setVoiceStatus("Kuota harian pelanggan sudah habis untuk tanggal yang dipilih.");
+    if (matchedMeals.length > availableQuota) {
+      setVoiceStatus(
+        `Jumlah lauk melebihi sisa kuota ${availableQuota}.`,
+      );
       setPendingVoice(null);
       return;
     }
 
-    if (result.quantity > availableQuota) {
-      setVoiceStatus(
-        `Jumlah yang disebutkan melebihi sisa kuota ${availableQuota} porsi. Sesuaikan jumlah secara manual.`,
-      );
+    if (matchedMeals.length > customer.package.meals.length) {
+      setVoiceStatus("Jumlah lauk melebihi isi paket pelanggan.");
       setPendingVoice(null);
       return;
     }
 
     setCustomerQuery(customer.customer.name);
     setSubscriptionId(customer.id);
-    setPackageMealId(meal.id);
-    setQuantity(result.quantity);
+    setPackageMealIds(matchedMeals.map((meal) => meal.id));
     setPendingVoice(result);
+
     setVoiceStatus(
-      `Suara dikenali: ${customer.customer.name}, ${meal.mealName}, ${result.quantity} porsi. Periksa kembali sebelum menyimpan.`,
+      `Suara dikenali: ${customer.customer.name}, ${matchedMeals.map((meal) => meal.mealName).join(", ")}. Periksa kembali sebelum menyimpan.`,
     );
   }
 
@@ -690,8 +752,7 @@ export default function PickupsPage() {
 
         if (!result) {
           setVoiceStatus(
-            `Ucapan "${transcript || "tidak terdeteksi"}" belum dapat dipahami. Contoh: kode pelanggan 7Kba, ayam, dua porsi.`
-          );
+            `Ucapan "${transcript || "tidak terdeteksi"}" belum dapat dipahami. Contoh: kode pelanggan K65, ayam dan ikan.`);
           setPendingVoice(null);
           return;
         }
@@ -720,7 +781,7 @@ export default function PickupsPage() {
 
       setIsListening(true);
       setVoiceStatus(
-        "Mendengarkan. Sebutkan kode pelanggan, menu, dan jumlah porsi.",
+        "Mendengarkan. Sebutkan kode pelanggan dan lauk yang diambil."
       );
     } catch {
       setIsListening(false);
@@ -738,18 +799,26 @@ export default function PickupsPage() {
     event.preventDefault();
     resetMessages();
 
-    if (!subscriptionId || !packageMealId || !pickupDate || !pickupTime) {
-      toast.error("Pelanggan, menu, tanggal, dan waktu wajib diisi.");
+    if (
+      !subscriptionId ||
+      !packageMealIds.length ||
+      !pickupDate ||
+      !pickupTime
+    ) {
+      toast.error("Pelanggan, lauk, tanggal, dan waktu wajib diisi.");
       return;
     }
+
     if (pickupDate > todayDate) {
       toast.error("Tanggal pengambilan tidak boleh di masa depan.");
       return;
     }
-    if (!selectedSubscription || !selectedMeal) {
+
+    if (!selectedSubscription || selectedMeals.length !== packageMealIds.length) {
       toast.error("Data langganan atau menu tidak valid.");
       return;
     }
+
     if (
       selectedSubscription.customer.status !== "ACTIVE" ||
       getSubscriptionState(selectedSubscription, todayDate) !== "ACTIVE" ||
@@ -759,8 +828,18 @@ export default function PickupsPage() {
       toast.error("Langganan pelanggan tidak aktif pada tanggal pengambilan.");
       return;
     }
-    if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > remainingQuota) {
-      toast.error(`Jumlah pengambilan harus antara 1 dan ${remainingQuota} porsi.`);
+
+    if (
+        new Set(packageMealIds).size !== packageMealIds.length ||
+        packageMealIds.length > remainingQuota ||
+        packageMealIds.length > availableMealOptions.length
+      ) {
+        toast.error("Jumlah atau pilihan lauk tidak valid.");
+        return;
+      }
+
+    if (packageMealIds.some((id) => takenMealIds.includes(id))) {
+      toast.error("Salah satu lauk sudah diambil pada tanggal tersebut.");
       return;
     }
 
@@ -768,7 +847,7 @@ export default function PickupsPage() {
   }
 
   async function confirmSavePickup() {
-    if (!selectedSubscription || !selectedMeal || saving) return;
+    if (!selectedSubscription || !selectedMeals.length || saving) return;
 
     setSaving(true);
     resetMessages();
@@ -779,10 +858,9 @@ export default function PickupsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           subscriptionId,
-          packageMealId,
+          packageMealIds,
           pickupDate,
           pickupTime,
-          quantity,
         }),
       });
 
@@ -792,21 +870,22 @@ export default function PickupsPage() {
         window.location.href = "/login";
         return;
       }
+
       if (!response.ok) {
         throw new Error(
-          getErrorMessage(data, "Gagal mencatat pengambilan makanan.")
+          getErrorMessage(data, "Gagal mencatat pengambilan makanan."),
         );
       }
 
       toast.success(
         "Pengambilan berhasil dicatat",
-        data.message ?? "Data pengambilan makanan berhasil disimpan."
+        data.message ?? "Data pengambilan makanan berhasil disimpan.",
       );
+
       setShowConfirm(false);
       setCustomerQuery("");
       setSubscriptionId("");
-      setPackageMealId("");
-      setQuantity(1);
+      setPackageMealIds([]);
       setPickupDate(todayDate);
       setPickupTime(getCurrentTime());
       setHistoryDate(todayDate);
@@ -819,11 +898,10 @@ export default function PickupsPage() {
         "Gagal mencatat pengambilan",
         err instanceof Error
           ? err.message
-          : "Terjadi kesalahan saat menyimpan pengambilan."
+          : "Terjadi kesalahan saat menyimpan pengambilan.",
       );
       setShowConfirm(false);
-    }
-    finally {
+    } finally {
       setSaving(false);
     }
   }
@@ -894,8 +972,7 @@ export default function PickupsPage() {
   function resetForm() {
     setCustomerQuery("");
     setSubscriptionId("");
-    setPackageMealId("");
-    setQuantity(1);
+    setPackageMealIds([]);
     setPickupDate(todayDate);
     setPickupTime(getCurrentTime());
     setPendingVoice(null);
@@ -907,11 +984,6 @@ export default function PickupsPage() {
   const subscriptionOptions = filteredSubscriptions.map((s) => ({
     value: s.id,
     label: `${s.customer.code} · ${s.customer.name} · ${s.package.name}`,
-  }));
-
-  const mealOptions = (selectedSubscription?.package.meals ?? []).map((m) => ({
-    value: m.id,
-    label: m.mealName,
   }));
 
   return (
@@ -1010,7 +1082,7 @@ export default function PickupsPage() {
               onChange={(value) => {
                 setPickupDate(value);
                 setSubscriptionId("");
-                setPackageMealId("");
+                setPackageMealIds([]);
                 setPendingVoice(null);
                 setVoiceStatus("");
               }}
@@ -1068,7 +1140,7 @@ export default function PickupsPage() {
               onChange={(event) => {
                 setCustomerQuery(event.target.value);
                 setSubscriptionId("");
-                setPackageMealId("");
+                setPackageMealIds([]);
                 setPendingVoice(null);
                 setVoiceStatus("");
               }}
@@ -1123,52 +1195,71 @@ export default function PickupsPage() {
             </div>
           )}
 
-          <div className="subscriptions-field">
-            <span>Lauk atau Menu</span>
-            <Select
-              value={packageMealId}
-              onChange={(value) => {
-                setPackageMealId(value);
-                setPendingVoice(null);
-              }}
-              options={mealOptions}
-              placeholder="Pilih lauk"
-              disabled={!selectedSubscription}
-              aria-label="Lauk atau menu"
-            />
-          </div>
+          {selectedSubscription && (
+            <div className="subscriptions-field pickups-meal-field">
+              <div className="pickups-meal-heading">
+                <span>Pilih Lauk</span>
+                <small>
+                  {selectedMeals.length} dipilih · Sisa kuota{" "}
+                  {Math.max(0, remainingQuota - selectedMeals.length)}
+                </small>
+              </div>
 
-          <label className="subscriptions-field">
-            <span>Jumlah Porsi</span>
-            <input
-              type="number"
-              min={1}
-              max={remainingQuota}
-              step={1}
-              value={quantity}
-              onChange={(event) => {
-                const value = event.target.value;
-                setQuantity(value === "" ? 0 : Number(value));
-                setPendingVoice(null);
-              }}
-              required
-              disabled={!selectedSubscription || remainingQuota < 1}
-            />
-            <small>
-              {selectedSubscription
-                ? `Maksimal ${remainingQuota} porsi untuk tanggal ini.`
-                : "Pilih pelanggan terlebih dahulu."}
-            </small>
-          </label>
+              <div className="pickups-meal-grid" role="group" aria-label="Pilih lauk">
+                {selectedSubscription.package.meals.map((meal) => {
+                  const checked = packageMealIds.includes(meal.id);
+                  const taken = takenMealIds.includes(meal.id);
+                  const limitReached = !checked && selectedMeals.length >= remainingQuota;
+
+                  return (
+                    <button
+                      key={meal.id}
+                      type="button"
+                      role="checkbox"
+                      aria-checked={checked}
+                      disabled={saving || taken || limitReached}
+                      onClick={() => toggleMeal(meal.id)}
+                      className={`pickups-meal-card${checked ? " is-checked" : ""}${
+                        taken ? " is-taken" : ""
+                      }`}
+                    >
+                      <span className="pickups-meal-check" aria-hidden="true">
+                        <svg viewBox="0 0 16 16" width="12" height="12">
+                          <path
+                            d="M3 8.5 6.5 12 13 4.5"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </span>
+                      <span className="pickups-meal-name">{meal.mealName}</span>
+                      <small className="pickups-meal-status">
+                        {taken ? "Sudah diambil" : checked ? "Dipilih" : ""}
+                      </small>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {remainingQuota < 1 && (
+                <small>Kuota pengambilan sudah habis.</small>
+              )}
+            </div>
+          )}
 
           {pendingVoice && (
             <div className="pickups-voice-confirmation">
               <strong>Periksa Hasil Pengenalan Suara</strong>
               <p>Pelanggan: {pendingVoice.customerQuery}</p>
-              <p>Menu: {pendingVoice.mealQuery}</p>
-              <p>Jumlah: {pendingVoice.quantity} porsi</p>
+              <p>
+                Menu: {selectedMeals.map((meal) => meal.mealName).join(", ")}
+              </p>
+              <p>Jumlah: {selectedMeals.length} lauk</p>
               <small>
-                Periksa nama pelanggan, menu, dan jumlah porsi sebelum menyimpan. Data belum tersimpan sampai pencatatan dikonfirmasi.
+                Periksa nama pelanggan dan lauk sebelum menyimpan. Data belum tersimpan sampai pencatatan dikonfirmasi.
               </small>
             </div>
           )}
@@ -1197,7 +1288,8 @@ export default function PickupsPage() {
                 saving ||
                 loading ||
                 !selectedSubscription ||
-                !selectedMeal ||
+                selectedMeals.length === 0 ||
+                selectedMeals.length !== packageMealIds.length ||
                 remainingQuota < 1
               }
             >
@@ -1530,7 +1622,7 @@ export default function PickupsPage() {
       </section>
 
       <Dialog
-        open={showConfirm && Boolean(selectedSubscription && selectedMeal)}
+        open={showConfirm && Boolean(selectedSubscription && selectedMeals.length)}
         onClose={() => setShowConfirm(false)}
         busy={saving}
         icon="✓"
@@ -1572,7 +1664,7 @@ export default function PickupsPage() {
           </div>
           <div>
             <dt>Menu</dt>
-            <dd>{selectedMeal?.mealName}</dd>
+            <dd>{selectedMeals.map((meal) => meal.mealName).join(", ")}</dd>
           </div>
           <div>
             <dt>Tanggal</dt>
@@ -1583,12 +1675,12 @@ export default function PickupsPage() {
             <dd>{pickupTime}</dd>
           </div>
           <div>
-            <dt>Jumlah</dt>
-            <dd>{quantity} porsi</dd>
+            <dt>Jumlah Lauk</dt>
+            <dd>{selectedMeals.length} lauk</dd>
           </div>
-          <div>
+           <div>
             <dt>Sisa kuota</dt>
-            <dd>{remainingQuota - quantity} porsi</dd>
+            <dd>{remainingQuota - selectedMeals.length} porsi</dd>
           </div>
         </dl>
       </Dialog>
@@ -1667,7 +1759,7 @@ export default function PickupsPage() {
         open={showVoiceDialog}
         onClose={stopVoiceRecognition}
         title="Input Suara"
-        description="Sebutkan kode pelanggan, menu yang diambil, dan jumlah porsinya."
+        description="Sebutkan kode pelanggan dan nama lauk yang diambil."
         icon="🎙"
       >
         <div className="pickups-voice-dialog-content">
@@ -1690,17 +1782,21 @@ export default function PickupsPage() {
 
           <div className="pickups-voice-dialog-example">
             <span>Contoh ucapan</span>
-            <strong>Kode pelanggan 7Kba, ayam, dua porsi.</strong>
+            <strong>Kode pelanggan K65, ayam dan ikan.</strong>
           </div>
 
-          {pendingVoice && selectedSubscription && selectedMeal && (
+          {pendingVoice && selectedSubscription && selectedMeals.length > 0 && (
             <div className="pickups-voice-dialog-example">
               <span>Hasil pengenalan suara</span>
               <strong>{selectedSubscription.customer.name}</strong>
               <strong>Kode: {selectedSubscription.customer.code}</strong>
-              <strong>Menu: {selectedMeal.mealName}</strong>
-              <strong>Jumlah: {quantity} porsi</strong>
-              <strong>Sisa kuota setelah pengambilan: {remainingQuota - quantity} porsi</strong>
+              <strong>
+                Menu: {selectedMeals.map((meal) => meal.mealName).join(", ")}
+              </strong>
+              <strong>Jumlah: {selectedMeals.length} lauk</strong>
+              <strong>
+                Sisa kuota setelah pengambilan: {remainingQuota - selectedMeals.length} porsi
+              </strong>
             </div>
           )}
         </div>
@@ -1739,7 +1835,8 @@ export default function PickupsPage() {
                 disabled={
                   !pendingVoice ||
                   !selectedSubscription ||
-                  !selectedMeal ||
+                  selectedMeals.length === 0 ||
+                  selectedMeals.length !== packageMealIds.length ||
                   saving ||
                   loading
                 }

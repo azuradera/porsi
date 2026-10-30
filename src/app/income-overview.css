@@ -1,9 +1,3 @@
-/* =========================================================
-   KEUANGAN — RINGKASAN PEMASUKAN (grafik 6 bulan)
-   Tempel di PALING BAWAH globals.css.
-   Memakai token tema biru langit yang sudah ada.
-   ========================================================= */
-
 .income-overview {
   display: grid;
   gap: 20px;

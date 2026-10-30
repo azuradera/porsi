@@ -291,7 +291,6 @@ export default function FinancePage() {
         payment.customerName.toLowerCase().includes(keyword) ||
         payment.customerCode.toLowerCase().includes(keyword) ||
         payment.packageName.toLowerCase().includes(keyword) ||
-        (payment.method ?? "").toLowerCase().includes(keyword) ||
         (payment.notes ?? "").toLowerCase().includes(keyword)
       );
     });
@@ -307,7 +306,6 @@ export default function FinancePage() {
       "Nama Pelanggan",
       "Paket",
       "Nominal",
-      "Metode Pembayaran",
       "Keterangan",
     ];
 
@@ -317,7 +315,6 @@ export default function FinancePage() {
       payment.customerName,
       payment.packageName,
       Number(payment.amount),
-      payment.method || "Tidak dicantumkan",
       payment.notes || "Pembayaran langganan",
     ]);
 
@@ -325,7 +322,7 @@ export default function FinancePage() {
       `"${String(value).replace(/"/g, '""')}"`;
 
     const csv = [header, ...rows]
-      .map((row) => row.map(escapeCsv).join(";"))
+      .map((row) => row.map(escapeCsv).join(","))
       .join("\r\n");
 
     const blob = new Blob(["\uFEFF", csv], {
