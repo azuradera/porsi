@@ -7,6 +7,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { Dialog } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
 import IncomeOverview from "@/components/income-overview";
+import RenewSubscriptionDialog from "@/components/renew-subscription-dialog";
 
 type Subscription = {
   id: string;
@@ -14,6 +15,10 @@ type Subscription = {
   startDate: string;
   endDate: string;
   package: { id: string; name: string };
+  payments?: {
+    notes: string | null;
+    paymentDate?: string;
+  }[];
 };
 
 type Customer = {
@@ -76,7 +81,36 @@ function getActiveSubscription(customer: Customer) {
 
 function getTodayDate() {
   const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jakarta",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+}
+
+function getRenewalStartDate(endDate: string) {
+  const today = getTodayDate();
+
+  if (endDate < today) {
+    return today;
+  }
+
+  const [year, month, day] = endDate.split("-").map(Number);
+  const nextDate = new Date(Date.UTC(year, month - 1, day + 1));
+
+  return [
+    nextDate.getUTCFullYear(),
+    String(nextDate.getUTCMonth() + 1).padStart(2, "0"),
+    String(nextDate.getUTCDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+function getInitialPaymentType(subscription: Subscription): "FULL" | "HALF" {
+  return subscription.payments?.[0]?.notes?.includes("15 hari")
+    ? "HALF"
+    : "FULL";
 }
 
 export default function CustomersPage() {
@@ -138,6 +172,7 @@ export default function CustomersPage() {
     const timer = window.setTimeout(() => {
       void loadCustomers();
     }, 250);
+
     return () => window.clearTimeout(timer);
   }, [loadCustomers]);
 
@@ -164,13 +199,16 @@ export default function CustomersPage() {
       } catch (err) {
         if (active) {
           toast.error(
-            err instanceof Error ? err.message : "Gagal mengambil paket katering",
+            err instanceof Error
+              ? err.message
+              : "Gagal mengambil paket katering",
           );
         }
       }
     }
 
     void loadPackages();
+
     return () => {
       active = false;
     };
@@ -183,10 +221,12 @@ export default function CustomersPage() {
       toast.error("Nama pelanggan wajib diisi.");
       return;
     }
+
     if (!packageId) {
       toast.error("Pilih paket katering aktif terlebih dahulu.");
       return;
     }
+
     if (!startDate) {
       toast.error("Tanggal mulai langganan wajib diisi.");
       return;
@@ -211,16 +251,18 @@ export default function CustomersPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || "Gagal menambahkan pelanggan dan langganan.");
+        throw new Error(
+          data.message || "Gagal menambahkan pelanggan dan langganan.",
+        );
       }
 
       const createdCustomer = data.customer as Customer;
       const selectedPackage = packages.find((item) => item.id === packageId);
 
       toast.success(
-      "Pelanggan berhasil ditambahkan",
-      `Pelanggan ${createdCustomer.code} berhasil ditambahkan dengan paket ${selectedPackage?.name ?? "pilihan"}.`
-    );
+        "Pelanggan berhasil ditambahkan",
+        `Pelanggan ${createdCustomer.code} berhasil ditambahkan dengan paket ${selectedPackage?.name ?? "pilihan"}.`,
+      );
 
       setName("");
       setPhone("");
@@ -235,7 +277,7 @@ export default function CustomersPage() {
       await loadCustomers();
     } catch (err) {
       toast.error(
-         "Gagal menambahkan pelanggan",
+        "Gagal menambahkan pelanggan",
         err instanceof Error
           ? err.message
           : "Terjadi kesalahan saat menyimpan pelanggan.",
@@ -297,6 +339,7 @@ export default function CustomersPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ confirm: true }),
       });
+
       const data = await response.json();
 
       if (!response.ok) {
@@ -322,9 +365,9 @@ export default function CustomersPage() {
   const busy = Boolean(submittingId || deletingId);
 
   const confirmTitle =
-  confirmAction?.action === "delete"
-    ? "Hapus pelanggan permanen?"
-    : "Batalkan langganan?";
+    confirmAction?.action === "delete"
+      ? "Hapus pelanggan permanen?"
+      : "Batalkan langganan?";
 
   const confirmText = confirmAction
     ? confirmAction.action === "delete"
@@ -351,9 +394,7 @@ export default function CustomersPage() {
           <button
             type="button"
             className="customers-primary-button"
-            onClick={() => {
-              setShowForm((current) => !current);
-            }}
+            onClick={() => setShowForm((current) => !current)}
           >
             {showForm ? "Tutup formulir" : "+ Tambah pelanggan"}
           </button>
@@ -487,7 +528,9 @@ export default function CustomersPage() {
           <strong className="customers-stat-value">
             {loading ? "..." : activeCount}
           </strong>
-          <span className="customers-stat-caption">Pelanggan aktif dalam hasil</span>
+          <span className="customers-stat-caption">
+            Pelanggan aktif dalam hasil
+          </span>
         </article>
 
         <article className="customers-stat-card">
@@ -495,7 +538,9 @@ export default function CustomersPage() {
           <strong className="customers-stat-value">
             {loading ? "..." : inactiveCount}
           </strong>
-          <span className="customers-stat-caption">Pelanggan nonaktif dalam hasil</span>
+          <span className="customers-stat-caption">
+            Pelanggan nonaktif dalam hasil
+          </span>
         </article>
       </section>
 
@@ -580,6 +625,9 @@ export default function CustomersPage() {
                 <tbody>
                   {customers.map((customer) => {
                     const subscription = getCurrentSubscription(customer);
+                    const activeSubscription = getActiveSubscription(customer);
+                    const canRenew =
+                      !activeSubscription && subscription?.status === "COMPLETED";
                     const isActive = customer.status === "ACTIVE";
                     const rowBusy =
                       submittingId === customer.id || deletingId === customer.id;
@@ -620,7 +668,9 @@ export default function CustomersPage() {
                               </span>
                             </div>
                           ) : (
-                            <span className="customers-muted">Belum berlangganan</span>
+                            <span className="customers-muted">
+                              Belum berlangganan
+                            </span>
                           )}
                         </td>
 
@@ -650,7 +700,7 @@ export default function CustomersPage() {
                               Detail
                             </Link>
 
-                            {getActiveSubscription(customer) && (
+                            {activeSubscription && (
                               <button
                                 type="button"
                                 className="customers-toggle-button is-deactivate"
@@ -662,19 +712,43 @@ export default function CustomersPage() {
                                 }
                                 disabled={rowBusy}
                               >
-                                {submittingId === customer.id ? "Memproses..." : "Batalkan"}
+                                {submittingId === customer.id
+                                  ? "Memproses..."
+                                  : "Batalkan"}
                               </button>
+                            )}
+
+                            {canRenew && subscription && (
+                              <RenewSubscriptionDialog
+                                customerId={customer.id}
+                                customerName={customer.name}
+                                customerCode={customer.code}
+                                subscriptionId={subscription.id}
+                                initialPackageId={subscription.package.id}
+                                initialPaymentType={getInitialPaymentType(
+                                  subscription,
+                                )}
+                                initialStartDate={getRenewalStartDate(
+                                  subscription.endDate,
+                                )}
+                                onSuccess={() => void loadCustomers()}
+                              />
                             )}
 
                             <button
                               type="button"
                               className="customers-delete-button"
                               onClick={() =>
-                                setConfirmAction({ customer, action: "delete" })
+                                setConfirmAction({
+                                  customer,
+                                  action: "delete",
+                                })
                               }
                               disabled={rowBusy}
                             >
-                              {deletingId === customer.id ? "Menghapus..." : "Hapus"}
+                              {deletingId === customer.id
+                                ? "Menghapus..."
+                                : "Hapus"}
                             </button>
                           </div>
                         </td>
@@ -688,6 +762,9 @@ export default function CustomersPage() {
             <div className="customers-mobile-list">
               {customers.map((customer) => {
                 const subscription = getCurrentSubscription(customer);
+                const activeSubscription = getActiveSubscription(customer);
+                const canRenew =
+                  !activeSubscription && subscription?.status === "COMPLETED";
                 const isActive = customer.status === "ACTIVE";
                 const rowBusy =
                   submittingId === customer.id || deletingId === customer.id;
@@ -748,7 +825,7 @@ export default function CustomersPage() {
                     </Link>
 
                     <div className="customers-mobile-actions">
-                      {getActiveSubscription(customer) && (
+                      {activeSubscription && (
                         <button
                           type="button"
                           className="customers-toggle-button is-deactivate"
@@ -760,19 +837,43 @@ export default function CustomersPage() {
                           }
                           disabled={rowBusy}
                         >
-                          {submittingId === customer.id ? "Memproses..." : "Batalkan"}
+                          {submittingId === customer.id
+                            ? "Memproses..."
+                            : "Batalkan"}
                         </button>
+                      )}
+
+                      {canRenew && subscription && (
+                        <RenewSubscriptionDialog
+                          customerId={customer.id}
+                          customerName={customer.name}
+                          customerCode={customer.code}
+                          subscriptionId={subscription.id}
+                          initialPackageId={subscription.package.id}
+                          initialPaymentType={getInitialPaymentType(
+                            subscription,
+                          )}
+                          initialStartDate={getRenewalStartDate(
+                            subscription.endDate,
+                          )}
+                          onSuccess={() => void loadCustomers()}
+                        />
                       )}
 
                       <button
                         type="button"
                         className="customers-delete-button"
                         onClick={() =>
-                          setConfirmAction({ customer, action: "delete" })
+                          setConfirmAction({
+                            customer,
+                            action: "delete",
+                          })
                         }
                         disabled={rowBusy}
                       >
-                        {deletingId === customer.id ? "Menghapus..." : "Hapus permanen"}
+                        {deletingId === customer.id
+                          ? "Menghapus..."
+                          : "Hapus permanen"}
                       </button>
                     </div>
                   </article>
@@ -816,7 +917,9 @@ export default function CustomersPage() {
               disabled={busy}
               onClick={() => {
                 if (!confirmAction) return;
+
                 const { customer, action } = confirmAction;
+
                 if (action === "delete") {
                   void deleteCustomer(customer);
                 } else {
@@ -825,10 +928,10 @@ export default function CustomersPage() {
               }}
             >
               {busy
-              ? "Memproses..."
-              : confirmAction?.action === "delete"
-                ? "Ya, hapus permanen"
-                : "Ya, batalkan langganan"}
+                ? "Memproses..."
+                : confirmAction?.action === "delete"
+                  ? "Ya, hapus permanen"
+                  : "Ya, batalkan langganan"}
             </button>
           </>
         }

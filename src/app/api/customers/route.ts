@@ -88,6 +88,11 @@ export async function GET(request: NextRequest) {
         subscriptions: {
           include: {
             package: true,
+            payments: {
+              orderBy: {
+                paymentDate: "desc",
+              },
+            },
           },
           orderBy: {
             createdAt: "desc",

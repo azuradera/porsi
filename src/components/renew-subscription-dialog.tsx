@@ -148,7 +148,7 @@ export default function RenewSubscriptionDialog({
       }
 
       toast.success(
-        "Langganan berhasil dibuat",
+        "Perpanjangan berhasil",
         `Langganan baru untuk ${customerName} berhasil disimpan.`,
       );
 
@@ -158,7 +158,7 @@ export default function RenewSubscriptionDialog({
       toast.error(
         error instanceof Error
           ? error.message
-          : "Terjadi kesalahan saat membuat langganan.",
+          : "Terjadi kesalahan saat memperpanjang langganan.",
       );
     } finally {
       setSaving(false);
@@ -172,15 +172,15 @@ export default function RenewSubscriptionDialog({
         className="customer-detail-button"
         onClick={() => setOpen(true)}
       >
-        Berlangganan Kembali
+        Perpanjang
       </button>
 
       <Dialog
         open={open}
         onClose={() => setOpen(false)}
         busy={saving}
-        title="Berlangganan Kembali"
-        description="Buat langganan baru menggunakan data pelanggan yang sudah tersimpan."
+        title="Perpanjang Langganan"
+        description="Buat periode langganan baru menggunakan data pelanggan yang sudah tersimpan."
         footer={
           <>
             <button
@@ -198,7 +198,7 @@ export default function RenewSubscriptionDialog({
               onClick={() => void handleSubmit()}
               disabled={saving || loadingPackages || packages.length === 0}
             >
-              {saving ? "Menyimpan..." : "Simpan Langganan"}
+              {saving ? "Menyimpan..." : "Simpan Perpanjangan"}
             </button>
           </>
         }
