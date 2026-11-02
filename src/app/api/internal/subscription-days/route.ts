@@ -42,9 +42,6 @@ export async function GET(request: Request) {
         status: {
           in: ["ACTIVE", "COMPLETED"],
         },
-        customer: {
-          status: "ACTIVE",
-        },
       },
       select: {
         id: true,
@@ -55,6 +52,8 @@ export async function GET(request: Request) {
       subscriptionId: string;
       status: string;
       message?: string;
+      extended?: boolean;
+      completed?: boolean;
     }> = [];
 
     for (const subscription of subscriptions) {
@@ -67,6 +66,9 @@ export async function GET(request: Request) {
         results.push({
           subscriptionId: subscription.id,
           status: result.status,
+          extended: result.extended,
+          completed:
+            "completed" in result ? result.completed : false,
         });
       } catch {
         results.push({
@@ -81,6 +83,14 @@ export async function GET(request: Request) {
       (result) => result.status === "PROCESSING_FAILED",
     ).length;
 
+    const extendedCount = results.filter(
+      (result) => result.extended,
+    ).length;
+
+    const completedCount = results.filter(
+      (result) => result.completed,
+    ).length;
+
     return NextResponse.json({
       message:
         failedCount === 0
@@ -88,7 +98,13 @@ export async function GET(request: Request) {
           : "Proses harian selesai dengan beberapa kegagalan",
       date: yesterday.toISOString().slice(0, 10),
       totalSubscriptions: subscriptions.length,
-      successfulCount: results.length - failedCount,
+      successfulCount: results.filter(
+        (result) =>
+          result.status === "SUCCESS" ||
+          result.status === "SKIPPED",
+      ).length,
+      extendedCount,
+      completedCount,
       failedCount,
       results,
     });

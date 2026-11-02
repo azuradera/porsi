@@ -4,6 +4,8 @@ import { Suspense,useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import CustomerEditForm from "@/components/customer-edit-form";
 import { useToast } from "@/components/ui/toast";
+import RenewSubscriptionDialog from "@/components/renew-subscription-dialog";
+import {addCalendarDays, getBusinessDate, parseBusinessDate} from "@/lib/date";
 
 
 type Customer = {
@@ -264,6 +266,26 @@ function CustomerDetailContent() {
     [subscriptions],
   );
 
+  const latestSubscription = subscriptions[0] ?? null;
+
+  const previousPaymentNotes = latestSubscription?.payments?.[0]?.notes ?? "";
+
+  const initialPaymentType: "FULL" | "HALF" =
+    previousPaymentNotes.includes("15 hari") ? "HALF" : "FULL";
+
+  const initialStartDate = latestSubscription
+    ? (() => {
+        const previousEndDate = latestSubscription.endDate.slice(0, 10);
+        const today = getBusinessDate();
+
+        return previousEndDate >= today
+          ? getBusinessDate(
+              addCalendarDays(parseBusinessDate(previousEndDate), 1),
+            )
+          : today;
+      })()
+   : getBusinessDate();
+
   const calendarDays = useMemo(() => {
     const first = new Date(currentMonth.year, currentMonth.month, 1);
     const last = new Date(currentMonth.year, currentMonth.month + 1, 0);
@@ -470,11 +492,25 @@ function CustomerDetailContent() {
 
       <section className="customer-detail-section">
         <div className="customer-detail-section-heading">
-          <div>
-            <span className="customer-detail-eyebrow">LANGGANAN</span>
-            <h2>Riwayat Langganan</h2>
-          </div>
+        <div>
+          <span className="customer-detail-eyebrow">LANGGANAN</span>
+          <h2>Riwayat Langganan</h2>
         </div>
+
+        {!activeSubscription &&
+        latestSubscription?.status === "COMPLETED" && (
+          <RenewSubscriptionDialog
+            customerId={customer.id}
+            customerName={customer.name}
+            customerCode={customer.code}
+            subscriptionId={latestSubscription.id}
+            initialPackageId={latestSubscription.package.id}
+            initialPaymentType={initialPaymentType}
+            initialStartDate={initialStartDate}
+            onSuccess={() => void loadData()}
+          />
+        )}
+      </div>
 
         {activeSubscription && (
           <article className="customer-detail-active-subscription">

@@ -31,9 +31,7 @@ export async function POST(
 ) {
   const auth = await requireAdmin(request);
 
-  if (auth) {
-    return auth;
-  }
+  if (auth) return auth;
 
   try {
     const { id } = await params;
@@ -83,9 +81,7 @@ export async function POST(
         `;
 
         const oldSubscription = await tx.subscription.findUnique({
-          where: {
-            id,
-          },
+          where: { id },
           include: {
             customer: true,
             package: true,
@@ -101,6 +97,7 @@ export async function POST(
         }
 
         const today = getBusinessDate();
+
         const oldEndDate = oldSubscription.endDate
           .toISOString()
           .slice(0, 10);
@@ -125,8 +122,8 @@ export async function POST(
           },
         });
 
-        if (!customer || customer.status !== "ACTIVE") {
-          throw new Error("CUSTOMER_INACTIVE");
+        if (!customer) {
+          throw new Error("CUSTOMER_NOT_FOUND");
         }
 
         const packageData = await tx.package.findUnique({
@@ -139,10 +136,10 @@ export async function POST(
           throw new Error("PACKAGE_UNAVAILABLE");
         }
 
-        const startDate = addCalendarDays(
-          oldSubscription.endDate,
-          1,
-        );
+        const startDate =
+          oldEndDate >= today
+            ? addCalendarDays(oldSubscription.endDate, 1)
+            : new Date(`${today}T00:00:00.000Z`);
 
         const durationDays = paymentType === "HALF" ? 15 : 30;
 
@@ -230,6 +227,15 @@ export async function POST(
           });
         }
 
+        await tx.customer.update({
+          where: {
+            id: customer.id,
+          },
+          data: {
+            status: "ACTIVE",
+          },
+        });
+
         return {
           subscription,
           durationDays,
@@ -282,13 +288,10 @@ export async function POST(
       );
     }
 
-    if (errorMessage === "CUSTOMER_INACTIVE") {
+    if (errorMessage === "CUSTOMER_NOT_FOUND") {
       return NextResponse.json(
-        {
-          message:
-            "Pelanggan tidak aktif sehingga perpanjangan ditolak",
-        },
-        { status: 409 },
+        { message: "Pelanggan tidak ditemukan" },
+        { status: 404 },
       );
     }
 

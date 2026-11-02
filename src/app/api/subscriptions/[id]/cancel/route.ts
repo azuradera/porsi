@@ -23,9 +23,7 @@ export async function POST(
 ) {
   const auth = await requireAdmin(request);
 
-  if (auth) {
-    return auth;
-  }
+  if (auth) return auth;
 
   try {
     const { id } = await params;
@@ -59,6 +57,13 @@ export async function POST(
           throw new Error("SUBSCRIPTION_ALREADY_COMPLETED");
         }
 
+        await tx.$queryRaw`
+          SELECT "id"
+          FROM "Customer"
+          WHERE "id" = ${existing.customerId}
+          FOR UPDATE
+        `;
+
         const updated = await tx.subscription.update({
           where: { id },
           data: {
@@ -80,6 +85,28 @@ export async function POST(
                 paymentDate: "desc",
               },
             },
+          },
+        });
+
+        const remainingActiveSubscription =
+          await tx.subscription.findFirst({
+            where: {
+              customerId: existing.customerId,
+              status: "ACTIVE",
+            },
+            select: {
+              id: true,
+            },
+          });
+
+        await tx.customer.update({
+          where: {
+            id: existing.customerId,
+          },
+          data: {
+            status: remainingActiveSubscription
+              ? "ACTIVE"
+              : "INACTIVE",
           },
         });
 

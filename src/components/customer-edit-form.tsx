@@ -25,7 +25,6 @@ export default function CustomerEditForm({
   const [name, setName] = useState(customer.name);
   const [phone, setPhone] = useState(customer.phone ?? "");
   const [address, setAddress] = useState(customer.address ?? "");
-  const [status, setStatus] = useState(customer.status);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -33,7 +32,9 @@ export default function CustomerEditForm({
     event.preventDefault();
     setError("");
 
-    if (!name.trim()) {
+    const trimmedName = name.trim();
+
+    if (!trimmedName) {
       setError("Nama pelanggan wajib diisi.");
       return;
     }
@@ -47,17 +48,18 @@ export default function CustomerEditForm({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          name,
-          phone,
-          address,
-          status,
+          name: trimmedName,
+          phone: phone.trim(),
+          address: address.trim(),
         }),
       });
 
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.message || "Gagal memperbarui pelanggan.");
+        throw new Error(
+          result.message || "Gagal memperbarui pelanggan.",
+        );
       }
 
       onUpdated(result.customer);
@@ -90,6 +92,7 @@ export default function CustomerEditForm({
           onChange={(event) => setName(event.target.value)}
           maxLength={100}
           required
+          disabled={loading}
         />
       </label>
 
@@ -101,6 +104,7 @@ export default function CustomerEditForm({
           onChange={(event) => setPhone(event.target.value)}
           maxLength={20}
           placeholder="Masukkan nomor telepon"
+          disabled={loading}
         />
       </label>
 
@@ -112,21 +116,13 @@ export default function CustomerEditForm({
           maxLength={5000}
           rows={3}
           placeholder="Masukkan alamat pelanggan"
+          disabled={loading}
         />
       </label>
 
-      <label className="customers-edit-field">
-        <span>Status pelanggan</span>
-        <select
-          value={status}
-          onChange={(event) =>
-            setStatus(event.target.value as Customer["status"])
-          }
-        >
-          <option value="ACTIVE">Aktif</option>
-          <option value="INACTIVE">Tidak aktif</option>
-        </select>
-      </label>
+      <div className="customers-edit-info">
+        Status pelanggan ditentukan otomatis berdasarkan langganan aktif.
+      </div>
 
       {error && (
         <div className="customers-edit-error" role="alert">

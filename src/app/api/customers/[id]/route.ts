@@ -11,7 +11,6 @@ type CustomerUpdateData = {
   name?: string;
   phone?: string | null;
   address?: string | null;
-  status?: "ACTIVE" | "INACTIVE";
 };
 
 function isPrismaError(
@@ -30,9 +29,7 @@ export async function GET(
 ) {
   const auth = await requireAdmin(request);
 
-  if (auth) {
-    return auth;
-  }
+  if (auth) return auth;
 
   try {
     const { id } = await params;
@@ -63,9 +60,7 @@ export async function PATCH(
 ) {
   const auth = await requireAdmin(request);
 
-  if (auth) {
-    return auth;
-  }
+  if (auth) return auth;
 
   try {
     const { id } = await params;
@@ -84,6 +79,16 @@ export async function PATCH(
 
     const data = body as Record<string, unknown>;
     const updateData: CustomerUpdateData = {};
+
+    if ("status" in data) {
+      return NextResponse.json(
+        {
+          message:
+            "Status pelanggan diperbarui otomatis berdasarkan langganan",
+        },
+        { status: 400 },
+      );
+    }
 
     if ("name" in data) {
       if (
@@ -160,23 +165,6 @@ export async function PATCH(
       updateData.address = address || null;
     }
 
-    if ("status" in data) {
-      if (
-        data.status !== "ACTIVE" &&
-        data.status !== "INACTIVE"
-      ) {
-        return NextResponse.json(
-          {
-            message:
-              "Status pelanggan harus ACTIVE atau INACTIVE",
-          },
-          { status: 400 },
-        );
-      }
-
-      updateData.status = data.status;
-    }
-
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json(
         { message: "Tidak ada data yang diperbarui" },
@@ -214,9 +202,7 @@ export async function DELETE(
 ) {
   const auth = await requireAdmin(request);
 
-  if (auth) {
-    return auth;
-  }
+  if (auth) return auth;
 
   try {
     const { id } = await params;

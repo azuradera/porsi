@@ -13,6 +13,18 @@ async function lockSubscription(
   `;
 }
 
+async function lockCustomer(
+  tx: Prisma.TransactionClient,
+  customerId: string,
+) {
+  await tx.$queryRaw`
+    SELECT "id"
+    FROM "Customer"
+    WHERE "id" = ${customerId}
+    FOR UPDATE
+  `;
+}
+
 function addCalendarDays(date: Date, days: number) {
   const result = new Date(date);
   result.setUTCDate(result.getUTCDate() + days);
@@ -58,6 +70,8 @@ export async function extendSubscriptionManually(
         throw new Error("SUBSCRIPTION_CANCELLED");
       }
 
+      await lockCustomer(tx, subscription.customerId);
+
       const previousEndDate = subscription.endDate;
       const newEndDate = addCalendarDays(previousEndDate, days);
 
@@ -77,6 +91,15 @@ export async function extendSubscriptionManually(
           reason: reason.trim(),
           previousEndDate,
           newEndDate,
+        },
+      });
+
+      await tx.customer.update({
+        where: {
+          id: subscription.customerId,
+        },
+        data: {
+          status: "ACTIVE",
         },
       });
 
@@ -115,12 +138,11 @@ export async function processSubscriptionDay(
             throw new Error("SUBSCRIPTION_NOT_FOUND");
           }
 
-          if (
-            subscription.status === "CANCELLED" ||
-            subscription.customer.status !== "ACTIVE"
-          ) {
+          if (subscription.status === "CANCELLED") {
             throw new Error("SUBSCRIPTION_INACTIVE");
           }
+
+          await lockCustomer(tx, subscription.customerId);
 
           if (
             day < normalizeDate(subscription.startDate) ||
@@ -167,13 +189,56 @@ export async function processSubscriptionDay(
 
           if (pickup) {
             await tx.subscriptionDay.update({
-              where: { id: dayRecord.id },
-              data: { processed: true },
+              where: {
+                id: dayRecord.id,
+              },
+              data: {
+                processed: true,
+              },
             });
+
+            const isLastDay =
+              day.getTime() ===
+              normalizeDate(subscription.endDate).getTime();
+
+            if (isLastDay) {
+              await tx.subscription.update({
+                where: {
+                  id: subscriptionId,
+                },
+                data: {
+                  status: "COMPLETED",
+                },
+              });
+
+              const otherActiveSubscriptions =
+                await tx.subscription.count({
+                  where: {
+                    customerId: subscription.customerId,
+                    id: {
+                      not: subscriptionId,
+                    },
+                    status: "ACTIVE",
+                  },
+                });
+
+              await tx.customer.update({
+                where: {
+                  id: subscription.customerId,
+                },
+                data: {
+                  status:
+                    otherActiveSubscriptions > 0
+                      ? "ACTIVE"
+                      : "INACTIVE",
+                },
+              });
+            }
 
             return {
               status: "SUCCESS",
               extended: false,
+              completed: isLastDay,
               reason: "DAY_HAS_PICKUP",
             };
           }
@@ -214,7 +279,9 @@ export async function processSubscriptionDay(
           });
 
           await tx.subscription.update({
-            where: { id: subscriptionId },
+            where: {
+              id: subscriptionId,
+            },
             data: {
               endDate: newEndDate,
               status: "ACTIVE",
@@ -222,16 +289,33 @@ export async function processSubscriptionDay(
           });
 
           await tx.subscriptionDay.update({
-            where: { id: dayRecord.id },
-            data: { processed: true },
+            where: {
+              id: dayRecord.id,
+            },
+            data: {
+              processed: true,
+            },
           });
 
           if (!noMealDay.processed) {
             await tx.noMealDay.update({
-              where: { id: noMealDay.id },
-              data: { processed: true },
+              where: {
+                id: noMealDay.id,
+              },
+              data: {
+                processed: true,
+              },
             });
           }
+
+          await tx.customer.update({
+            where: {
+              id: subscription.customerId,
+            },
+            data: {
+              status: "ACTIVE",
+            },
+          });
 
           return {
             status: "SUCCESS",
