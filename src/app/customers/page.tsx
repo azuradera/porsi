@@ -44,7 +44,7 @@ type CustomerResponse = {
 
 type ConfirmState = {
   customer: Customer;
-  action: "activate" | "deactivate" | "delete";
+  action: "cancel" | "delete";
 } | null;
 
 function formatDate(value: string) {
@@ -66,6 +66,12 @@ function formatCurrency(value: number | string) {
 
 function getCurrentSubscription(customer: Customer) {
   return customer.subscriptions?.[0] ?? null;
+}
+
+function getActiveSubscription(customer: Customer) {
+  return customer.subscriptions?.find(
+    (subscription) => subscription.status === "ACTIVE",
+  ) ?? null;
 }
 
 function getTodayDate() {
@@ -239,32 +245,43 @@ export default function CustomersPage() {
     }
   }
 
-  async function toggleCustomerStatus(customer: Customer) {
-    const nextStatus = customer.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+  async function cancelCustomerSubscription(customer: Customer) {
+    const subscription = getActiveSubscription(customer);
+
+    if (!subscription) {
+      toast.error("Pelanggan tidak memiliki langganan aktif.");
+      return;
+    }
 
     setSubmittingId(customer.id);
 
     try {
-      const response = await fetch(`/api/customers/${customer.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: nextStatus }),
-      });
+      const response = await fetch(
+        `/api/subscriptions/${subscription.id}/cancel`,
+        {
+          method: "POST",
+        },
+      );
+
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || "Gagal mengubah status pelanggan");
+        throw new Error(data.message || "Gagal membatalkan langganan.");
       }
 
       setConfirmAction(null);
-      toast.success(  "Status pelanggan diperbarui",
-      `Status pelanggan ${customer.name} berhasil diubah.`);
+
+      toast.success(
+        "Langganan berhasil dibatalkan",
+        `Langganan milik ${customer.name} sudah dibatalkan.`,
+      );
+
       await loadCustomers();
     } catch (err) {
       toast.error(
         err instanceof Error
           ? err.message
-          : "Terjadi kesalahan saat mengubah status pelanggan",
+          : "Terjadi kesalahan saat membatalkan langganan.",
       );
     } finally {
       setSubmittingId("");
@@ -305,18 +322,14 @@ export default function CustomersPage() {
   const busy = Boolean(submittingId || deletingId);
 
   const confirmTitle =
-    confirmAction?.action === "delete"
-      ? "Hapus pelanggan permanen?"
-      : confirmAction?.action === "deactivate"
-        ? "Nonaktifkan pelanggan?"
-        : "Aktifkan pelanggan?";
+  confirmAction?.action === "delete"
+    ? "Hapus pelanggan permanen?"
+    : "Batalkan langganan?";
 
   const confirmText = confirmAction
     ? confirmAction.action === "delete"
       ? `Pelanggan ${confirmAction.customer.name} akan dihapus. Data langganan dan data terkait juga dapat terhapus sesuai aturan relasi basis data. Tindakan ini tidak dapat dibatalkan.`
-      : confirmAction.action === "deactivate"
-        ? `Pelanggan ${confirmAction.customer.name} akan dinonaktifkan.`
-        : `Pelanggan ${confirmAction.customer.name} akan diaktifkan kembali.`
+      : `Langganan aktif milik ${confirmAction.customer.name} akan dibatalkan secara permanen. Langganan yang sudah dibatalkan tidak dapat diaktifkan kembali.`
     : "";
 
   return (
@@ -637,25 +650,21 @@ export default function CustomersPage() {
                               Detail
                             </Link>
 
-                            <button
-                              type="button"
-                              className={`customers-toggle-button ${
-                                isActive ? "is-deactivate" : "is-activate"
-                              }`}
-                              onClick={() =>
-                                setConfirmAction({
-                                  customer,
-                                  action: isActive ? "deactivate" : "activate",
-                                })
-                              }
-                              disabled={rowBusy}
-                            >
-                              {submittingId === customer.id
-                                ? "Memproses..."
-                                : isActive
-                                  ? "Nonaktifkan"
-                                  : "Aktifkan"}
-                            </button>
+                            {getActiveSubscription(customer) && (
+                              <button
+                                type="button"
+                                className="customers-toggle-button is-deactivate"
+                                onClick={() =>
+                                  setConfirmAction({
+                                    customer,
+                                    action: "cancel",
+                                  })
+                                }
+                                disabled={rowBusy}
+                              >
+                                {submittingId === customer.id ? "Memproses..." : "Batalkan"}
+                              </button>
+                            )}
 
                             <button
                               type="button"
@@ -739,25 +748,21 @@ export default function CustomersPage() {
                     </Link>
 
                     <div className="customers-mobile-actions">
-                      <button
-                        type="button"
-                        className={`customers-toggle-button ${
-                          isActive ? "is-deactivate" : "is-activate"
-                        }`}
-                        onClick={() =>
-                          setConfirmAction({
-                            customer,
-                            action: isActive ? "deactivate" : "activate",
-                          })
-                        }
-                        disabled={rowBusy}
-                      >
-                        {submittingId === customer.id
-                          ? "Memproses..."
-                          : isActive
-                            ? "Nonaktifkan"
-                            : "Aktifkan"}
-                      </button>
+                      {getActiveSubscription(customer) && (
+                        <button
+                          type="button"
+                          className="customers-toggle-button is-deactivate"
+                          onClick={() =>
+                            setConfirmAction({
+                              customer,
+                              action: "cancel",
+                            })
+                          }
+                          disabled={rowBusy}
+                        >
+                          {submittingId === customer.id ? "Memproses..." : "Batalkan"}
+                        </button>
+                      )}
 
                       <button
                         type="button"
@@ -815,17 +820,15 @@ export default function CustomersPage() {
                 if (action === "delete") {
                   void deleteCustomer(customer);
                 } else {
-                  void toggleCustomerStatus(customer);
+                  void cancelCustomerSubscription(customer);
                 }
               }}
             >
               {busy
-                ? "Memproses..."
-                : confirmAction?.action === "delete"
-                  ? "Ya, hapus permanen"
-                  : confirmAction?.action === "deactivate"
-                    ? "Ya, nonaktifkan"
-                    : "Ya, aktifkan"}
+              ? "Memproses..."
+              : confirmAction?.action === "delete"
+                ? "Ya, hapus permanen"
+                : "Ya, batalkan langganan"}
             </button>
           </>
         }

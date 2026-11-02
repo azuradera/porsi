@@ -30,7 +30,7 @@ export async function POST(
   try {
     const { id } = await params;
 
-    const result = await prisma.$transaction(
+    const subscription = await prisma.$transaction(
       async (tx) => {
         await tx.$queryRaw`
           SELECT "id"
@@ -41,21 +41,11 @@ export async function POST(
 
         const existing = await tx.subscription.findUnique({
           where: { id },
-          include: {
-            customer: true,
-          },
         });
 
         if (!existing) {
           throw new Error("SUBSCRIPTION_NOT_FOUND");
         }
-
-        await tx.$queryRaw`
-          SELECT "id"
-          FROM "Customer"
-          WHERE "id" = ${existing.customerId}
-          FOR UPDATE
-        `;
 
         if (existing.status === "CANCELLED") {
           throw new Error("SUBSCRIPTION_ALREADY_CANCELLED");
@@ -65,7 +55,14 @@ export async function POST(
           throw new Error("SUBSCRIPTION_ALREADY_COMPLETED");
         }
 
-        const subscription = await tx.subscription.update({
+        await tx.$queryRaw`
+          SELECT "id"
+          FROM "Customer"
+          WHERE "id" = ${existing.customerId}
+          FOR UPDATE
+        `;
+
+        const updated = await tx.subscription.update({
           where: { id },
           data: {
             status: "CANCELLED",
@@ -89,30 +86,23 @@ export async function POST(
           },
         });
 
-        const otherActiveSubscriptions =
-          await tx.subscription.count({
-            where: {
-              customerId: existing.customerId,
-              status: "ACTIVE",
-            },
-          });
+        const activeSubscriptions = await tx.subscription.count({
+          where: {
+            customerId: existing.customerId,
+            status: "ACTIVE",
+          },
+        });
 
-        const customer = await tx.customer.update({
+        await tx.customer.update({
           where: {
             id: existing.customerId,
           },
           data: {
-            status:
-              otherActiveSubscriptions > 0
-                ? "ACTIVE"
-                : "INACTIVE",
+            status: activeSubscriptions > 0 ? "ACTIVE" : "INACTIVE",
           },
         });
 
-        return {
-          subscription,
-          customer,
-        };
+        return updated;
       },
       {
         isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
@@ -121,8 +111,7 @@ export async function POST(
 
     return NextResponse.json({
       message: "Langganan berhasil dibatalkan",
-      subscription: result.subscription,
-      customer: result.customer,
+      subscription,
     });
   } catch (error) {
     if (error instanceof Error) {
@@ -156,7 +145,7 @@ export async function POST(
     ) {
       return NextResponse.json(
         {
-          message: "Terjadi konflik transaksi. Silakan ulangi permintaan",
+          message: "Terjadi konflik transaksi. Silakan ulangi permintaan.",
         },
         { status: 409 },
       );
