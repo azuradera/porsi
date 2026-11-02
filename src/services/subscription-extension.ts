@@ -178,7 +178,7 @@ export async function processSubscriptionDay(
             };
           }
 
-          const noMealDay = await tx.noMealDay.findUnique({
+          let noMealDay = await tx.noMealDay.findUnique({
             where: {
               subscriptionId_date: {
                 subscriptionId,
@@ -187,13 +187,24 @@ export async function processSubscriptionDay(
             },
           });
 
+          if (!noMealDay) {
+            noMealDay = await tx.noMealDay.create({
+              data: {
+                customerId: subscription.customerId,
+                subscriptionId,
+                date: day,
+                processed: true,
+              },
+            });
+          }
+
           const previousEndDate = subscription.endDate;
           const newEndDate = addCalendarDays(previousEndDate, 1);
 
           const extension = await tx.subscriptionExtension.create({
             data: {
               subscriptionId,
-              noMealDayId: noMealDay?.id,
+              noMealDayId: noMealDay.id,
               type: "AUTOMATIC",
               days: 1,
               reason: `unused-day:${day.toISOString().slice(0, 10)}`,
@@ -215,7 +226,7 @@ export async function processSubscriptionDay(
             data: { processed: true },
           });
 
-          if (noMealDay) {
+          if (!noMealDay.processed) {
             await tx.noMealDay.update({
               where: { id: noMealDay.id },
               data: { processed: true },
