@@ -181,6 +181,8 @@ function CustomerDetailContent() {
   const [error] = useState("");
   const toast = useToast();
   const [editingCustomer, setEditingCustomer] = useState(false);
+  const [cancellingSubscriptionId, setCancellingSubscriptionId] = useState("");
+  const [subscriptionToCancel, setSubscriptionToCancel] = useState<Subscription | null>(null);
   const [selectedDate, setSelectedDate] = useState<DayInfo | null>(null);
   const [currentMonth, setCurrentMonth] = useState(() => {
     const now = new Date();
@@ -375,6 +377,53 @@ function CustomerDetailContent() {
     setSelectedDate({ date, pickups, noMealDays });
   }
 
+  async function cancelSubscription() {
+    if (!subscriptionToCancel) return;
+
+    const subscriptionId = subscriptionToCancel.id;
+
+    setCancellingSubscriptionId(subscriptionId);
+
+    try {
+      const response = await fetch(
+        `/api/subscriptions/${subscriptionId}/cancel`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.message || "Gagal membatalkan langganan.",
+        );
+      }
+
+      setSubscriptionToCancel(null);
+
+      toast.success(
+        "Langganan berhasil dibatalkan",
+        data.customer?.status === "INACTIVE"
+          ? "Langganan dibatalkan dan pelanggan sekarang tidak aktif."
+          : "Langganan dibatalkan. Pelanggan masih memiliki langganan aktif lainnya.",
+      );
+
+      await loadData();
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Terjadi kesalahan saat membatalkan langganan.",
+      );
+    } finally {
+      setCancellingSubscriptionId("");
+    }
+  }
+
   if (loading && !customer) {
     return (
       <main className="customer-detail-page">
@@ -546,8 +595,20 @@ function CustomerDetailContent() {
                     <h3>{subscription.package.name}</h3>
                     <span>{getSubscriptionStatus(subscription.status)}</span>
                   </div>
+                  <div className="customer-detail-subscription-actions">
+                    <strong>{formatCurrency(subscription.price)}</strong>
 
-                  <strong>{formatCurrency(subscription.price)}</strong>
+                    {subscription.status === "ACTIVE" && (
+                      <button
+                        type="button"
+                        className="customer-detail-cancel-button"
+                        onClick={() => setSubscriptionToCancel(subscription)}
+                        disabled={Boolean(cancellingSubscriptionId)}
+                      >
+                        Batalkan Langganan
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="customer-detail-subscription-dates">
@@ -794,6 +855,129 @@ function CustomerDetailContent() {
           </article>
         )}
       </section>
+
+      {subscriptionToCancel && (
+        <div
+          role="presentation"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              setSubscriptionToCancel(null);
+            }
+          }}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 1000,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "20px",
+            background: "rgba(15, 23, 42, 0.45)",
+            backdropFilter: "blur(4px)",
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cancel-subscription-title"
+            style={{
+              width: "100%",
+              maxWidth: "420px",
+              padding: "24px",
+              borderRadius: "18px",
+              background: "#ffffff",
+              boxShadow: "0 20px 60px rgba(15, 23, 42, 0.2)",
+            }}
+          >
+            <div
+              style={{
+                width: "42px",
+                height: "42px",
+                display: "grid",
+                placeItems: "center",
+                borderRadius: "12px",
+                background: "#fee2e2",
+                color: "#dc2626",
+                fontSize: "22px",
+                fontWeight: 700,
+                marginBottom: "16px",
+              }}
+            >
+              !
+            </div>
+
+            <h2
+              id="cancel-subscription-title"
+              style={{
+                margin: "0 0 10px",
+                fontSize: "20px",
+                color: "#172554",
+              }}
+            >
+              Batalkan langganan?
+            </h2>
+
+            <p style={{ color: "#64748b", lineHeight: 1.6 }}>
+              Langganan {subscriptionToCancel.package.name} milik{" "}
+              <strong>{customer.name}</strong> akan dibatalkan.
+              Pelanggan tidak dapat menggunakan langganan ini lagi.
+            </p>
+
+            <p style={{ color: "#64748b", fontSize: "13px", lineHeight: 1.5 }}>
+              Periode langganan:{" "}
+              {formatDate(subscriptionToCancel.startDate)} sampai{" "}
+              {formatDate(subscriptionToCancel.endDate)}.
+              Riwayat pembayaran dan pengambilan tetap tersimpan.
+            </p>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: "10px",
+                marginTop: "24px",
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setSubscriptionToCancel(null)}
+                disabled={Boolean(cancellingSubscriptionId)}
+                style={{
+                  padding: "11px 18px",
+                  borderRadius: "10px",
+                  border: "1px solid #cbd5e1",
+                  background: "#ffffff",
+                  color: "#334155",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Kembali
+              </button>
+
+              <button
+                type="button"
+                onClick={() => void cancelSubscription()}
+                disabled={Boolean(cancellingSubscriptionId)}
+                style={{
+                  padding: "11px 18px",
+                  borderRadius: "10px",
+                  border: "none",
+                  background: "#dc2626",
+                  color: "#ffffff",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  opacity: cancellingSubscriptionId ? 0.6 : 1,
+                }}
+              >
+                {cancellingSubscriptionId
+                  ? "Memproses..."
+                  : "Ya, batalkan"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
 
       <div className="customer-detail-footer">
         <span>Kode pelanggan: {customer.code}</span>

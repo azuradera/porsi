@@ -23,12 +23,14 @@ export async function POST(
 ) {
   const auth = await requireAdmin(request);
 
-  if (auth) return auth;
+  if (auth) {
+    return auth;
+  }
 
   try {
     const { id } = await params;
 
-    const subscription = await prisma.$transaction(
+    const result = await prisma.$transaction(
       async (tx) => {
         await tx.$queryRaw`
           SELECT "id"
@@ -41,20 +43,11 @@ export async function POST(
           where: { id },
           include: {
             customer: true,
-            package: true,
           },
         });
 
         if (!existing) {
           throw new Error("SUBSCRIPTION_NOT_FOUND");
-        }
-
-        if (existing.status === "CANCELLED") {
-          throw new Error("SUBSCRIPTION_ALREADY_CANCELLED");
-        }
-
-        if (existing.status === "COMPLETED") {
-          throw new Error("SUBSCRIPTION_ALREADY_COMPLETED");
         }
 
         await tx.$queryRaw`
@@ -64,7 +57,15 @@ export async function POST(
           FOR UPDATE
         `;
 
-        const updated = await tx.subscription.update({
+        if (existing.status === "CANCELLED") {
+          throw new Error("SUBSCRIPTION_ALREADY_CANCELLED");
+        }
+
+        if (existing.status === "COMPLETED") {
+          throw new Error("SUBSCRIPTION_ALREADY_COMPLETED");
+        }
+
+        const subscription = await tx.subscription.update({
           where: { id },
           data: {
             status: "CANCELLED",
@@ -88,29 +89,30 @@ export async function POST(
           },
         });
 
-        const remainingActiveSubscription =
-          await tx.subscription.findFirst({
+        const otherActiveSubscriptions =
+          await tx.subscription.count({
             where: {
               customerId: existing.customerId,
               status: "ACTIVE",
             },
-            select: {
-              id: true,
-            },
           });
 
-        await tx.customer.update({
+        const customer = await tx.customer.update({
           where: {
             id: existing.customerId,
           },
           data: {
-            status: remainingActiveSubscription
-              ? "ACTIVE"
-              : "INACTIVE",
+            status:
+              otherActiveSubscriptions > 0
+                ? "ACTIVE"
+                : "INACTIVE",
           },
         });
 
-        return updated;
+        return {
+          subscription,
+          customer,
+        };
       },
       {
         isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
@@ -119,7 +121,8 @@ export async function POST(
 
     return NextResponse.json({
       message: "Langganan berhasil dibatalkan",
-      subscription,
+      subscription: result.subscription,
+      customer: result.customer,
     });
   } catch (error) {
     if (error instanceof Error) {
@@ -140,8 +143,7 @@ export async function POST(
       if (error.message === "SUBSCRIPTION_ALREADY_COMPLETED") {
         return NextResponse.json(
           {
-            message:
-              "Langganan yang sudah selesai tidak dapat dibatalkan",
+            message: "Langganan yang sudah selesai tidak dapat dibatalkan",
           },
           { status: 409 },
         );
@@ -154,8 +156,7 @@ export async function POST(
     ) {
       return NextResponse.json(
         {
-          message:
-            "Terjadi konflik transaksi. Silakan ulangi permintaan",
+          message: "Terjadi konflik transaksi. Silakan ulangi permintaan",
         },
         { status: 409 },
       );
