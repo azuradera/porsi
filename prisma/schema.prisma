@@ -29,14 +29,6 @@ enum ExtensionType {
   MANUAL
 }
 
-enum ExpenseCategory {
-  INGREDIENTS
-  SALARY
-  TRANSPORT
-  UTILITIES
-  EQUIPMENT
-  OTHER
-}
 
 model Customer {
   id        String         @id @default(cuid())
@@ -160,7 +152,6 @@ model Payment {
   subscriptionId String
   amount         Decimal  @db.Decimal(12, 2)
   paymentDate    DateTime @default(now())
-  method         String?  @db.VarChar(30)
   notes          String?  @db.Text
   createdAt      DateTime @default(now())
 
@@ -169,19 +160,6 @@ model Payment {
   @@index([subscriptionId, paymentDate])
 }
 
-model Expense {
-  id          String          @id @default(cuid())
-  description String          @db.VarChar(150)
-  category    ExpenseCategory @default(OTHER)
-  amount      Decimal         @db.Decimal(12, 2)
-  expenseDate DateTime        @db.Date
-  notes       String?         @db.Text
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
-
-  @@index([expenseDate])
-  @@index([category])
-}
 
 model SubscriptionDay {
   id             String   @id @default(cuid())

@@ -6,30 +6,10 @@ import { MonthPicker } from "@/components/ui/month-picker";
 import { useToast } from "@/components/ui/toast";
 import IncomeOverview from "@/components/income-overview";
 
-type ExpenseCategory =
-  | "INGREDIENTS"
-  | "TRANSPORT"
-  | "PACKAGING"
-  | "SALARY"
-  | "UTILITIES"
-  | "EQUIPMENT"
-  | "OTHER";
-
-type Expense = {
-  id: string;
-  description: string;
-  category: ExpenseCategory;
-  amount: number | string;
-  expenseDate: string;
-  notes: string | null;
-  createdAt?: string;
-};
-
 type Payment = {
   id: string;
   amount: number | string;
   paymentDate: string;
-  method?: string;
   notes?: string | null;
   customerCode: string;
   customerName: string;
@@ -38,14 +18,9 @@ type Payment = {
 
 type FinanceReport = {
   month: string;
-  summary?: Record<string, number | undefined>;
   payments?: Payment[];
-  expenses?: Expense[];
   message?: string;
-  [key: string]: unknown;
 };
-
-type ExpenseResponse = { expenses?: Expense[]; message?: string };
 
 type Transaction = {
   id: string;
@@ -53,19 +28,8 @@ type Transaction = {
   detail: string;
   date: string;
   amount: number;
-  type: "income" | "expense";
   category: string;
 };
-
-const categories: { value: ExpenseCategory; label: string }[] = [
-  { value: "INGREDIENTS", label: "Bahan makanan" },
-  { value: "TRANSPORT", label: "Transportasi" },
-  { value: "PACKAGING", label: "Kemasan" },
-  { value: "SALARY", label: "Gaji" },
-  { value: "UTILITIES", label: "Listrik dan air" },
-  { value: "EQUIPMENT", label: "Peralatan" },
-  { value: "OTHER", label: "Lainnya" },
-];
 
 const currentMonth = () => {
   const now = new Date();
@@ -87,7 +51,9 @@ const formatRupiah = (value: number) =>
 const formatDate = (value: string) => {
   const date = value.slice(0, 10);
   const [year, month, day] = date.split("-").map(Number);
+
   if (!year || !month || !day) return value;
+
   return new Intl.DateTimeFormat("id-ID", {
     day: "numeric",
     month: "short",
@@ -96,20 +62,19 @@ const formatDate = (value: string) => {
   }).format(new Date(Date.UTC(year, month - 1, day, 12)));
 };
 
-const getCategoryLabel = (value: string) =>
-  categories.find((c) => c.value === value)?.label ?? value;
-
 const getErrorMessage = (error: unknown) =>
   error instanceof Error ? error.message : "Terjadi kesalahan";
 
 const shiftMonth = (month: string, offset: number) => {
   const [year, monthNumber] = month.split("-").map(Number);
   const date = new Date(year, monthNumber - 1 + offset, 1);
+
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 };
 
 const monthShortLabel = (month: string) => {
   const [year, monthNumber] = month.split("-").map(Number);
+
   return new Intl.DateTimeFormat("id-ID", { month: "short" }).format(
     new Date(year, monthNumber - 1, 1),
   );
@@ -117,13 +82,17 @@ const monthShortLabel = (month: string) => {
 
 const fetchMonthIncome = async (targetMonth: string) => {
   try {
-    const response = await fetch(`/api/reports/finance?month=${targetMonth}`, {
-      cache: "no-store",
-    });
+    const response = await fetch(
+      `/api/reports/finance?month=${targetMonth}`,
+      { cache: "no-store" },
+    );
+
     if (!response.ok) return 0;
+
     const data = (await response.json()) as FinanceReport;
+
     return Array.isArray(data.payments)
-      ? data.payments.reduce((sum, p) => sum + Number(p.amount), 0)
+      ? data.payments.reduce((sum, payment) => sum + Number(payment.amount), 0)
       : 0;
   } catch {
     return 0;
@@ -132,10 +101,8 @@ const fetchMonthIncome = async (targetMonth: string) => {
 
 export default function FinancePage() {
   const [month, setMonth] = useState("");
-  const [expenses, setExpenses] = useState<Expense[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"all" | "income" | "expense">("all");
   const [search, setSearch] = useState("");
   const [initialized, setInitialized] = useState(false);
   const [history, setHistory] = useState<{ label: string; value: number }[]>([]);
@@ -152,45 +119,43 @@ export default function FinancePage() {
     setLoading(true);
 
     try {
-      const lastDay = getLastDayOfMonth(month);
-      const previousMonths = [-5, -4, -3, -2, -1].map((o) => shiftMonth(month, o));
+      const previousMonths = [-5, -4, -3, -2, -1].map((offset) =>
+        shiftMonth(month, offset),
+      );
 
-      const [expenseResponse, reportResponse, previousTotals] = await Promise.all([
-        fetch(
-          `/api/expenses?startDate=${month}-01&endDate=${month}-${String(lastDay).padStart(2, "0")}`,
-          { cache: "no-store" },
-        ),
-        fetch(`/api/reports/finance?month=${month}`, { cache: "no-store" }),
+      const [reportResponse, previousTotals] = await Promise.all([
+        fetch(`/api/reports/finance?month=${month}`, {
+          cache: "no-store",
+        }),
         Promise.all(previousMonths.map(fetchMonthIncome)),
       ]);
 
-      const expenseData = (await expenseResponse.json()) as ExpenseResponse;
       const reportData = (await reportResponse.json()) as FinanceReport;
 
-      if (!expenseResponse.ok) {
-        throw new Error(expenseData.message || "Gagal mengambil data pengeluaran");
-      }
       if (!reportResponse.ok) {
-        throw new Error(reportData.message || "Gagal mengambil laporan keuangan");
+        throw new Error(
+          reportData.message || "Gagal mengambil laporan keuangan",
+        );
       }
 
-      setExpenses(Array.isArray(expenseData.expenses) ? expenseData.expenses : []);
-      setPayments(Array.isArray(reportData.payments) ? reportData.payments : []);
+      setPayments(
+        Array.isArray(reportData.payments) ? reportData.payments : [],
+      );
+
       setHistory(
-        previousMonths.map((m, i) => ({
-          label: monthShortLabel(m),
-          value: previousTotals[i],
+        previousMonths.map((previousMonth, index) => ({
+          label: monthShortLabel(previousMonth),
+          value: previousTotals[index],
         })),
       );
-    } catch (err) {
-      toast.error(getErrorMessage(err));
-      setExpenses([]);
+    } catch (error) {
+      toast.error(getErrorMessage(error));
       setPayments([]);
       setHistory([]);
     } finally {
       setLoading(false);
     }
-  }, [month]);
+  }, [month, toast]);
 
   useEffect(() => {
     if (!initialized || !month) return;
@@ -198,16 +163,9 @@ export default function FinancePage() {
   }, [initialized, month, loadFinance]);
 
   const totalIncome = useMemo(
-    () => payments.reduce((sum, p) => sum + Number(p.amount), 0),
+    () => payments.reduce((sum, payment) => sum + Number(payment.amount), 0),
     [payments],
   );
-
-  const totalExpenses = useMemo(
-    () => expenses.reduce((sum, e) => sum + Number(e.amount), 0),
-    [expenses],
-  );
-
-  const netCashFlow = totalIncome - totalExpenses;
 
   const monthlyIncome = useMemo(
     () => [
@@ -217,13 +175,20 @@ export default function FinancePage() {
     [history, month, totalIncome],
   );
 
-  const previousIncome = history.length ? history[history.length - 1].value : 0;
+  const previousIncome = history.length
+    ? history[history.length - 1].value
+    : 0;
 
   const byPackage = useMemo(() => {
     const map = new Map<string, number>();
-    payments.forEach((p) =>
-      map.set(p.packageName, (map.get(p.packageName) ?? 0) + Number(p.amount)),
-    );
+
+    payments.forEach((payment) => {
+      map.set(
+        payment.packageName,
+        (map.get(payment.packageName) ?? 0) + Number(payment.amount),
+      );
+    });
+
     return Array.from(map, ([name, amount]) => ({ name, amount }));
   }, [payments]);
 
@@ -231,71 +196,47 @@ export default function FinancePage() {
     () =>
       [...payments]
         .sort((a, b) =>
-          b.paymentDate.slice(0, 10).localeCompare(a.paymentDate.slice(0, 10)),
+          b.paymentDate
+            .slice(0, 10)
+            .localeCompare(a.paymentDate.slice(0, 10)),
         )
-        .map((p) => ({
-          id: p.id,
-          customerName: p.customerName,
-          packageName: p.packageName,
-          amount: Number(p.amount),
-          paymentDate: p.paymentDate,
+        .map((payment) => ({
+          id: payment.id,
+          customerName: payment.customerName,
+          packageName: payment.packageName,
+          amount: Number(payment.amount),
+          paymentDate: payment.paymentDate,
         })),
     [payments],
   );
 
-  const transactions = useMemo<Transaction[]>(() => {
-    const incomeTransactions: Transaction[] = payments.map((payment) => ({
-      id: `income-${payment.id}`,
-      description: payment.customerName,
-      detail: `${payment.customerCode} · ${payment.packageName}`,
-      date: payment.paymentDate,
-      amount: Number(payment.amount),
-      type: "income",
-      category: "Pembayaran langganan",
-    }));
-
-    const expenseTransactions: Transaction[] = expenses.map((expense) => ({
-      id: `expense-${expense.id}`,
-      description: expense.description,
-      detail: expense.notes || getCategoryLabel(expense.category),
-      date: expense.expenseDate,
-      amount: Number(expense.amount),
-      type: "expense",
-      category: getCategoryLabel(expense.category),
-    }));
-
-    return [...incomeTransactions, ...expenseTransactions].sort((a, b) =>
-      b.date.slice(0, 10).localeCompare(a.date.slice(0, 10)),
-    );
-  }, [payments, expenses]);
+  const transactions = useMemo<Transaction[]>(
+    () =>
+      payments.map((payment) => ({
+        id: payment.id,
+        description: payment.customerName,
+        detail: `${payment.customerCode} · ${payment.packageName}`,
+        date: payment.paymentDate,
+        amount: Number(payment.amount),
+        category: "Pembayaran langganan",
+      })),
+    [payments],
+  );
 
   const filteredTransactions = useMemo(() => {
     const keyword = search.trim().toLowerCase();
-    return transactions.filter((t) => {
-      const matchesTab = activeTab === "all" || t.type === activeTab;
-      const matchesSearch =
+
+    return transactions.filter(
+      (transaction) =>
         !keyword ||
-        t.description.toLowerCase().includes(keyword) ||
-        t.detail.toLowerCase().includes(keyword) ||
-        t.category.toLowerCase().includes(keyword);
-      return matchesTab && matchesSearch;
-    });
-  }, [transactions, activeTab, search]);
+        transaction.description.toLowerCase().includes(keyword) ||
+        transaction.detail.toLowerCase().includes(keyword) ||
+        transaction.category.toLowerCase().includes(keyword),
+    );
+  }, [transactions, search]);
 
   const handleExport = () => {
-    const keyword = search.trim().toLowerCase();
-
-    const exportPayments = payments.filter((payment) => {
-      return (
-        !keyword ||
-        payment.customerName.toLowerCase().includes(keyword) ||
-        payment.customerCode.toLowerCase().includes(keyword) ||
-        payment.packageName.toLowerCase().includes(keyword) ||
-        (payment.notes ?? "").toLowerCase().includes(keyword)
-      );
-    });
-
-    if (exportPayments.length === 0) {
+    if (filteredTransactions.length === 0) {
       toast.error("Tidak ada data pemasukan untuk diekspor");
       return;
     }
@@ -309,14 +250,20 @@ export default function FinancePage() {
       "Keterangan",
     ];
 
-    const rows = exportPayments.map((payment) => [
-      payment.paymentDate.slice(0, 10),
-      payment.customerCode,
-      payment.customerName,
-      payment.packageName,
-      Number(payment.amount),
-      payment.notes || "Pembayaran langganan",
-    ]);
+    const rows = payments
+      .filter((payment) =>
+        filteredTransactions.some(
+          (transaction) => transaction.id === payment.id,
+        ),
+      )
+      .map((payment) => [
+        payment.paymentDate.slice(0, 10),
+        payment.customerCode,
+        payment.customerName,
+        payment.packageName,
+        Number(payment.amount),
+        payment.notes || "Pembayaran langganan",
+      ]);
 
     const escapeCsv = (value: string | number) =>
       `"${String(value).replace(/"/g, '""')}"`;
@@ -342,10 +289,6 @@ export default function FinancePage() {
     URL.revokeObjectURL(url);
   };
 
-  const incomeFiltered = filteredTransactions
-    .filter((t) => t.type === "income")
-    .reduce((sum, t) => sum + t.amount, 0);
-
   return (
     <main className="finance-page">
       <header className="finance-header">
@@ -353,9 +296,7 @@ export default function FinancePage() {
           <div>
             <span className="finance-eyebrow">MANAJEMEN USAHA</span>
             <h1>Keuangan</h1>
-            <p>
-              Catat pemasukan dan pengeluaran usaha katering dalam satu tempat.
-            </p>
+            <p>Kelola pemasukan dari pembayaran langganan katering.</p>
           </div>
         </div>
 
@@ -373,7 +314,6 @@ export default function FinancePage() {
             <Link href="/" className="finance-back">
               <span>Dashboard</span>
             </Link>
-
           </div>
         </div>
       </header>
@@ -383,20 +323,6 @@ export default function FinancePage() {
           <span className="finance-summary-label">Total pemasukan</span>
           <strong>{formatRupiah(totalIncome)}</strong>
           <p>Dari pembayaran yang tercatat pada periode ini</p>
-        </article>
-
-        <article
-          className={`finance-summary-card ${
-            netCashFlow >= 0 ? "finance-net-positive" : "finance-net-negative"
-          }`}
-        >
-          <span className="finance-summary-label">Arus kas bersih</span>
-          <strong>{formatRupiah(netCashFlow)}</strong>
-          <p>
-            {netCashFlow >= 0
-              ? "Pemasukan lebih besar daripada pengeluaran"
-              : "Pengeluaran lebih besar daripada pemasukan"}
-          </p>
         </article>
       </section>
 
@@ -415,9 +341,9 @@ export default function FinancePage() {
         <div className="finance-transactions-heading">
           <div className="finance-transactions-title-group">
             <div>
-              <span className="finance-eyebrow">BUKU KAS</span>
+              <span className="finance-eyebrow">RIWAYAT PEMBAYARAN</span>
               <h2>Riwayat transaksi</h2>
-              <p>Semua transaksi yang tercatat pada bulan terpilih.</p>
+              <p>Daftar pembayaran langganan pada bulan terpilih.</p>
             </div>
 
             <label className="finance-search">
@@ -426,8 +352,8 @@ export default function FinancePage() {
                 type="search"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Cari transaksi..."
-                aria-label="Cari transaksi"
+                placeholder="Cari pembayaran..."
+                aria-label="Cari pembayaran"
               />
             </label>
           </div>
@@ -443,28 +369,6 @@ export default function FinancePage() {
           </button>
         </div>
 
-        <div className="finance-transaction-controls">
-          <div className="finance-tabs" role="tablist" aria-label="Jenis transaksi">
-            {(
-              [
-                { key: "all", label: "Semua" },
-                { key: "income", label: "Pemasukan" },
-              ] as const
-            ).map((tab) => (
-              <button
-                key={tab.key}
-                type="button"
-                role="tab"
-                aria-selected={activeTab === tab.key}
-                className={activeTab === tab.key ? "active" : ""}
-                onClick={() => setActiveTab(tab.key)}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
         {loading ? (
           <div className="finance-state">
             <span className="finance-spinner" />
@@ -472,11 +376,11 @@ export default function FinancePage() {
           </div>
         ) : filteredTransactions.length === 0 ? (
           <div className="finance-empty">
-            <h3>Belum ada transaksi</h3>
+            <h3>Belum ada pembayaran</h3>
             <p>
               {search
-                ? "Tidak ada transaksi yang sesuai dengan pencarian."
-                : "Transaksi pada periode ini akan muncul di sini."}
+                ? "Tidak ada pembayaran yang sesuai dengan pencarian."
+                : "Pembayaran pada periode ini akan muncul di sini."}
             </p>
           </div>
         ) : (
@@ -488,42 +392,29 @@ export default function FinancePage() {
                     <th>Tanggal</th>
                     <th>Transaksi</th>
                     <th>Kategori</th>
-                    <th>Jenis</th>
                     <th className="finance-amount-cell">Nominal</th>
                   </tr>
                 </thead>
 
                 <tbody>
-                  {filteredTransactions.map((t) => (
-                    <tr key={t.id}>
-                      <td className="finance-date-cell">{formatDate(t.date)}</td>
+                  {filteredTransactions.map((transaction) => (
+                    <tr key={transaction.id}>
+                      <td className="finance-date-cell">
+                        {formatDate(transaction.date)}
+                      </td>
                       <td>
                         <div className="finance-transaction-name">
-                          <strong>{t.description}</strong>
-                          <span>{t.detail}</span>
+                          <strong>{transaction.description}</strong>
+                          <span>{transaction.detail}</span>
                         </div>
                       </td>
                       <td>
-                        <span className="finance-category">{t.category}</span>
-                      </td>
-                      <td>
-                        <span
-                          className={`finance-type-badge ${
-                            t.type === "income" ? "income" : "expense"
-                          }`}
-                        >
-                          {t.type === "income" ? "Pemasukan" : "Pengeluaran"}
+                        <span className="finance-category">
+                          {transaction.category}
                         </span>
                       </td>
-                      <td
-                        className={`finance-amount-cell ${
-                          t.type === "income"
-                            ? "finance-amount-income"
-                            : "finance-amount-expense"
-                        }`}
-                      >
-                        {t.type === "income" ? "+" : "−"}
-                        {formatRupiah(t.amount)}
+                      <td className="finance-amount-cell finance-amount-income">
+                        +{formatRupiah(transaction.amount)}
                       </td>
                     </tr>
                   ))}
@@ -532,33 +423,27 @@ export default function FinancePage() {
             </div>
 
             <div className="finance-mobile-transactions">
-              {filteredTransactions.map((t) => (
-                <article className="finance-mobile-transaction" key={t.id}>
+              {filteredTransactions.map((transaction) => (
+                <article
+                  className="finance-mobile-transaction"
+                  key={transaction.id}
+                >
                   <div className="finance-mobile-transaction-top">
-                    <span
-                      className={`finance-type-badge ${
-                        t.type === "income" ? "income" : "expense"
-                      }`}
-                    >
-                      {t.type === "income" ? "Pemasukan" : "Pengeluaran"}
+                    <span className="finance-type-badge income">
+                      Pemasukan
                     </span>
-                    <time>{formatDate(t.date)}</time>
+                    <time>{formatDate(transaction.date)}</time>
                   </div>
 
-                  <strong>{t.description}</strong>
-                  <span className="finance-mobile-detail">{t.detail}</span>
+                  <strong>{transaction.description}</strong>
+                  <span className="finance-mobile-detail">
+                    {transaction.detail}
+                  </span>
 
                   <div className="finance-mobile-transaction-bottom">
-                    <span>{t.category}</span>
-                    <strong
-                      className={
-                        t.type === "income"
-                          ? "finance-amount-income"
-                          : "finance-amount-expense"
-                      }
-                    >
-                      {t.type === "income" ? "+" : "−"}
-                      {formatRupiah(t.amount)}
+                    <span>{transaction.category}</span>
+                    <strong className="finance-amount-income">
+                      +{formatRupiah(transaction.amount)}
                     </strong>
                   </div>
                 </article>
@@ -566,8 +451,17 @@ export default function FinancePage() {
             </div>
 
             <footer className="finance-table-footer">
-              <span>Menampilkan {filteredTransactions.length} transaksi</span>
-              <span>Pemasukan {formatRupiah(incomeFiltered)}</span>
+              <span>
+                Menampilkan {filteredTransactions.length} pembayaran
+              </span>
+              <span>
+                Total {formatRupiah(
+                  filteredTransactions.reduce(
+                    (sum, transaction) => sum + transaction.amount,
+                    0,
+                  ),
+                )}
+              </span>
             </footer>
           </>
         )}

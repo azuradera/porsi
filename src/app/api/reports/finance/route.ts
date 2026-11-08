@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { ExpenseCategory } from "@/generated/prisma/client";
 import { parseBusinessDate } from "@/lib/date";
 import { requireAdmin } from "@/lib/require-admin";
 
@@ -64,7 +63,7 @@ export async function GET(request: Request) {
 
     const { startDate, endDate } = range;
 
-    const [payments, expenses, subscriptions] = await Promise.all([
+    const [payments, subscriptions] = await Promise.all([
       prisma.payment.findMany({
         where: {
           paymentDate: {
@@ -82,18 +81,6 @@ export async function GET(request: Request) {
         },
         orderBy: {
           paymentDate: "asc",
-        },
-      }),
-
-      prisma.expense.findMany({
-        where: {
-          expenseDate: {
-            gte: startDate,
-            lt: endDate,
-          },
-        },
-        orderBy: {
-          expenseDate: "asc",
         },
       }),
 
@@ -136,30 +123,7 @@ export async function GET(request: Request) {
       0,
     );
 
-    const totalExpenses = expenses.reduce(
-      (total, expense) => total + Number(expense.amount),
-      0,
-    );
-
-    const expensesByCategory = Object.values(ExpenseCategory).map(
-      (category) => {
-        const categoryExpenses = expenses.filter(
-          (expense) => expense.category === category,
-        );
-
-        return {
-          category,
-          total: categoryExpenses.reduce(
-            (total, expense) => total + Number(expense.amount),
-            0,
-          ),
-          count: categoryExpenses.length,
-        };
-      },
-    );
-
     const paymentCount = payments.length;
-    const expenseCount = expenses.length;
 
     return NextResponse.json({
       month,
@@ -169,30 +133,17 @@ export async function GET(request: Request) {
       },
       summary: {
         totalRevenue,
-        totalExpenses,
-        balance: totalRevenue - totalExpenses,
         paymentCount,
-        expenseCount,
         subscriptionCount: subscriptions.length,
       },
-      expensesByCategory,
       payments: payments.map((payment) => ({
         id: payment.id,
         amount: Number(payment.amount),
         paymentDate: payment.paymentDate,
-        method: payment.method,
         notes: payment.notes,
         customerCode: payment.subscription.customer.code,
         customerName: payment.subscription.customer.name,
         packageName: payment.subscription.package.name,
-      })),
-      expenses: expenses.map((expense) => ({
-        id: expense.id,
-        description: expense.description,
-        category: expense.category,
-        amount: Number(expense.amount),
-        expenseDate: expense.expenseDate,
-        notes: expense.notes,
       })),
       subscriptions,
     });
