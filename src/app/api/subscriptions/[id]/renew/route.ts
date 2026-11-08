@@ -193,7 +193,6 @@ export async function POST(
               create: {
                 amount: paymentAmount,
                 paymentDate: new Date(),
-                method: null,
                 notes:
                   paymentType === "HALF"
                     ? "Pembayaran perpanjangan paket 15 hari"

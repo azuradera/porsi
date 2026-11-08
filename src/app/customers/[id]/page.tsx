@@ -673,12 +673,6 @@ function CustomerDetailContent() {
                         key={payment.id}
                         className="customer-detail-history-row"
                       >
-                        <div>
-                          <strong>{formatCurrency(payment.amount)}</strong>
-                          <span>
-                            {payment.method || "Metode tidak dicatat"}
-                          </span>
-                        </div>
 
                         <div>
                           <span>{formatDate(payment.paymentDate)}</span>

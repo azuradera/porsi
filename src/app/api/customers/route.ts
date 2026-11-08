@@ -323,7 +323,6 @@ export async function POST(request: NextRequest) {
                   create: {
                     amount: paymentAmount,
                     paymentDate: new Date(),
-                    method: null,
                     notes:
                       paymentType === "HALF"
                         ? "Pembayaran paket 15 hari"

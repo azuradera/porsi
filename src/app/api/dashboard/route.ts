@@ -25,10 +25,8 @@ export async function GET(request: Request) {
       todayPickups,
       todayNoMealDays,
       todayPayments,
-      todayExpenses,
       upcomingSubscriptions,
       recentPayments,
-      recentExpenses,
     ] = await Promise.all([
       prisma.customer.count({
         where: {
@@ -98,18 +96,6 @@ export async function GET(request: Request) {
         },
       }),
 
-      prisma.expense.findMany({
-        where: {
-          expenseDate: {
-            gte: today,
-            lt: tomorrow,
-          },
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
-      }),
-
       prisma.subscription.findMany({
         where: {
           status: "ACTIVE",
@@ -147,13 +133,6 @@ export async function GET(request: Request) {
         },
         take: 5,
       }),
-
-      prisma.expense.findMany({
-        orderBy: {
-          expenseDate: "desc",
-        },
-        take: 5,
-      }),
     ]);
 
     const totalPickupQuantity = todayPickups.reduce(
@@ -163,11 +142,6 @@ export async function GET(request: Request) {
 
     const totalIncomeToday = todayPayments.reduce(
       (total, payment) => total + Number(payment.amount),
-      0,
-    );
-
-    const totalExpensesToday = todayExpenses.reduce(
-      (total, expense) => total + Number(expense.amount),
       0,
     );
 
@@ -181,8 +155,6 @@ export async function GET(request: Request) {
         totalPickupQuantity,
         totalNoMealDays: todayNoMealDays,
         totalIncomeToday,
-        totalExpensesToday,
-        netCashFlowToday: totalIncomeToday - totalExpensesToday,
         subscriptionsEndingSoon: upcomingSubscriptions.length,
       },
 
@@ -220,16 +192,6 @@ export async function GET(request: Request) {
         },
       })),
 
-      todayExpenses: todayExpenses.map((expense) => ({
-        id: expense.id,
-        description: expense.description,
-        category: expense.category,
-        amount: Number(expense.amount),
-        expenseDate: expense.expenseDate
-          .toISOString()
-          .slice(0, 10),
-      })),
-
       subscriptionsEndingSoon: upcomingSubscriptions.map(
         (subscription) => ({
           id: subscription.id,
@@ -258,16 +220,6 @@ export async function GET(request: Request) {
         customerName: payment.subscription.customer.name,
         customerCode: payment.subscription.customer.code,
         packageName: payment.subscription.package.name,
-      })),
-
-      recentExpenses: recentExpenses.map((expense) => ({
-        id: expense.id,
-        description: expense.description,
-        category: expense.category,
-        amount: Number(expense.amount),
-        expenseDate: expense.expenseDate
-          .toISOString()
-          .slice(0, 10),
       })),
     });
   } catch {
