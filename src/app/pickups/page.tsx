@@ -317,8 +317,10 @@ export default function PickupsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
+  const [skipHistorySearch, setSkipHistorySearch] = useState("");
   const [todayDate, setTodayDate] = useState("");
   const [historyDate, setHistoryDate] = useState("");
+  const [historyFiltersInitialized, setHistoryFiltersInitialized] = useState(false);
   const [customerQuery, setCustomerQuery] = useState("");
   const [subscriptionId, setSubscriptionId] = useState("");
   const [customerDropdownOpen, setCustomerDropdownOpen] = useState(false);
@@ -428,10 +430,12 @@ export default function PickupsPage() {
   }, []);
 
   useEffect(() => {
-    if (!historyDate && todayDate) {
+    if (todayDate && !historyFiltersInitialized) {
       setHistoryDate(todayDate);
+      setSkipHistoryDate(todayDate);
+      setHistoryFiltersInitialized(true);
     }
-  }, [todayDate, historyDate]);
+  }, [todayDate, historyFiltersInitialized]);
 
   useEffect(() => {
     void loadData();
@@ -618,11 +622,24 @@ export default function PickupsPage() {
   }, [pickups, search, historyDate]);
 
   const filteredNoMealDays = useMemo(() => {
-    return noMealDays.filter(
-      (item) =>
-        !skipHistoryDate || item.date.slice(0, 10) === skipHistoryDate,
-    );
-  }, [noMealDays, skipHistoryDate]);
+    const query = normalizeText(skipHistorySearch);
+
+    return noMealDays.filter((item) => {
+      const matchesSearch =
+        !query ||
+        normalizeText(item.customer.name).includes(query) ||
+        normalizeText(item.customer.code).includes(query) ||
+        normalizeText(item.subscription.package.name).includes(query) ||
+        item.subscription.package.meals.some((meal) =>
+          normalizeText(meal.mealName).includes(query),
+        );
+
+      const matchesDate =
+        !skipHistoryDate || item.date.slice(0, 10) === skipHistoryDate;
+
+      return matchesSearch && matchesDate;
+    });
+  }, [noMealDays, skipHistoryDate, skipHistorySearch]);
 
   const summary = useMemo(() => {
     const todayPickups = pickups.filter(
@@ -1691,6 +1708,16 @@ export default function PickupsPage() {
         </div>
 
         <div className="subscriptions-filters pickups-history-filters">
+          <label className="subscriptions-search">
+            <span aria-hidden="true">⌕</span>
+            <input
+              type="search"
+              placeholder="Cari nama, kode, paket, atau lauk..."
+              value={skipHistorySearch}
+              onChange={(event) => setSkipHistorySearch(event.target.value)}
+            />
+          </label>
+
           <div className="pickups-date-filter">
             <span>Filter tanggal</span>
             <DatePicker
