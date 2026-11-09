@@ -1742,50 +1742,85 @@ export default function PickupsPage() {
             <p>Catatan yang sesuai dengan filter akan muncul di sini.</p>
           </div>
         ) : (
-          <div className="subscriptions-table-wrapper">
-            <table className="subscriptions-table">
-              <thead>
-                <tr>
-                  <th>Pelanggan</th>
-                  <th>Paket</th>
-                  <th>Tanggal Tidak Ambil</th>
-                  <th>Perpanjangan</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {filteredNoMealDays.map((item) => (
-                  <tr key={item.id}>
-                    <td>
-                      <div className="subscriptions-customer-cell">
-                        <span className="subscriptions-avatar">
-                          {item.customer.name
-                            .trim()
-                            .charAt(0)
-                            .toUpperCase() || "?"}
-                        </span>
-
-                        <span>
-                          <strong>{item.customer.name}</strong>
-                          <small>{item.customer.code}</small>
-                        </span>
-                      </div>
-                    </td>
-
-                    <td>{item.subscription.package.name}</td>
-
-                    <td>{formatDate(item.date)}</td>
-
-                    <td>
-                      {item.extension
-                        ? `${item.extension.days} hari`
-                        : "Belum diperpanjang"}
-                    </td>
+          <>
+            <div className="subscriptions-table-wrapper">
+              <table className="subscriptions-table">
+                <thead>
+                  <tr>
+                    <th>Pelanggan</th>
+                    <th>Paket</th>
+                    <th>Tanggal Tidak Ambil</th>
+                    <th>Perpanjangan</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+
+                <tbody>
+                  {filteredNoMealDays.map((item) => (
+                    <tr key={item.id}>
+                      <td>
+                        <div className="subscriptions-customer-cell">
+                          <span className="subscriptions-avatar">
+                            {item.customer.name
+                              .trim()
+                              .charAt(0)
+                              .toUpperCase() || "?"}
+                          </span>
+
+                          <span>
+                            <strong>{item.customer.name}</strong>
+                            <small>{item.customer.code}</small>
+                          </span>
+                        </div>
+                      </td>
+
+                      <td>{item.subscription.package.name}</td>
+                      <td>{formatDate(item.date)}</td>
+
+                      <td>
+                        {item.extension
+                          ? `${item.extension.days} hari`
+                          : "Belum diperpanjang"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="subscriptions-mobile-list">
+              {filteredNoMealDays.map((item) => (
+                <article className="subscriptions-mobile-card" key={item.id}>
+                  <div className="subscriptions-mobile-card-top">
+                    <div>
+                      <strong>{item.customer.name}</strong>
+                      <small>{item.customer.code}</small>
+                    </div>
+                  </div>
+
+                  <div className="subscriptions-mobile-package">
+                    <span>Paket</span>
+                    <strong>{item.subscription.package.name}</strong>
+                  </div>
+
+                  <div className="subscriptions-mobile-dates">
+                    <div>
+                      <span>Tanggal Tidak Ambil</span>
+                      <strong>{formatDate(item.date)}</strong>
+                    </div>
+
+                    <div>
+                      <span>Perpanjangan</span>
+                      <strong>
+                        {item.extension
+                          ? `${item.extension.days} hari`
+                          : "Belum diperpanjang"}
+                      </strong>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </>
         )}
       </section>
 
