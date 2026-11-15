@@ -657,6 +657,11 @@ export default function PickupsPage() {
     };
   }, [pickups, subscriptions, todayDate]);
 
+  const showVoiceResult =
+    Boolean(pendingVoice) &&
+    Boolean(selectedSubscription) &&
+    selectedMeals.length > 0;
+
   function resetMessages() {}
 
   function selectSubscription(id: string) {
@@ -1072,7 +1077,6 @@ export default function PickupsPage() {
   function resetForm() {
     setCustomerQuery("");
     setSubscriptionId("");
-    setCustomerDropdownOpen(false);
     setCustomerDropdownOpen(false);
     setPackageMealIds([]);
     setPickupDate(todayDate);
@@ -1983,23 +1987,43 @@ export default function PickupsPage() {
             {voiceStatus || "Siap menerima perintah suara."}
           </p>
 
-          <div className="pickups-voice-dialog-example">
-            <span>Contoh ucapan</span>
-            <strong>Kode pelanggan K65, ayam dan ikan.</strong>
-          </div>
-
-          {pendingVoice && selectedSubscription && selectedMeals.length > 0 && (
+          {/* Contoh ucapan hanya tampil bila hasil belum benar */}
+          {!showVoiceResult && (
             <div className="pickups-voice-dialog-example">
-              <span>Hasil pengenalan suara</span>
-              <strong>{selectedSubscription.customer.name}</strong>
-              <strong>Kode: {selectedSubscription.customer.code}</strong>
-              <strong>
-                Menu: {selectedMeals.map((meal) => meal.mealName).join(", ")}
-              </strong>
-              <strong>Jumlah: {selectedMeals.length} lauk</strong>
-              <strong>
-                Sisa kuota setelah pengambilan: {remainingQuota - selectedMeals.length} porsi
-              </strong>
+              <span>Contoh ucapan</span>
+              <strong>Kode pelanggan K65, ayam dan ikan.</strong>
+            </div>
+          )}
+
+          {/* Hasil pengenalan suara, dipisah per baris dengan garis */}
+          {showVoiceResult && selectedSubscription && (
+            <div className="pickups-voice-result">
+              <span className="pickups-voice-result-title">
+                Hasil pengenalan suara
+              </span>
+
+              <dl className="pickups-voice-result-rows">
+                <div>
+                  <dt>Pelanggan</dt>
+                  <dd>{selectedSubscription.customer.name}</dd>
+                </div>
+                <div>
+                  <dt>Kode</dt>
+                  <dd>{selectedSubscription.customer.code}</dd>
+                </div>
+                <div>
+                  <dt>Menu</dt>
+                  <dd>{selectedMeals.map((meal) => meal.mealName).join(", ")}</dd>
+                </div>
+                <div>
+                  <dt>Jumlah</dt>
+                  <dd>{selectedMeals.length} lauk</dd>
+                </div>
+                <div>
+                  <dt>Sisa kuota</dt>
+                  <dd>{remainingQuota - selectedMeals.length} porsi</dd>
+                </div>
+              </dl>
             </div>
           )}
         </div>
