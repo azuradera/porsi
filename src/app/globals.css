@@ -7518,7 +7518,6 @@
     padding: 12px 14px;
   }
 
-  /* di layar kecil: label di atas, nilai di bawah */
   .pickups-voice-result-rows > div {
     flex-direction: column;
     align-items: flex-start;
@@ -7527,5 +7526,83 @@
 
   .pickups-voice-result-rows dd {
     text-align: left;
+  }
+}
+
+.dialog:has(.pickups-voice-dialog-content) {
+  width: min(420px, calc(100vw - 24px));
+  max-height: 85dvh;
+  padding: 16px;
+}
+
+.pickups-voice-dialog-content {
+  gap: 10px;
+  padding: 2px 0 10px;
+}
+
+.pickups-voice-dialog-indicator {
+  width: 56px;
+  height: 56px;
+  font-size: 24px;
+}
+
+.pickups-voice-dialog-status {
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+
+.pickups-voice-dialog-example {
+  gap: 4px;
+  padding: 10px 12px;
+}
+
+.pickups-voice-result {
+  padding: 10px 12px;
+}
+
+.pickups-voice-result-rows > div {
+  padding: 7px 0;
+}
+
+.pickups-voice-dialog-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-solid);
+}
+
+.pickups-voice-dialog-actions > button {
+  min-width: 0;
+  min-height: 46px;
+  width: 100%;
+}
+
+.pickups-voice-dialog-actions > .subscriptions-primary-button {
+  grid-column: 1 / -1;
+  order: -1;
+  min-height: 50px;
+  font-size: var(--fs-md);
+}
+
+@media (max-width: 480px) {
+  .dialog:has(.pickups-voice-dialog-content) {
+    width: 100%;
+    max-height: 85dvh;
+    padding: 14px 14px calc(14px + env(safe-area-inset-bottom));
+  }
+
+  .pickups-voice-dialog-indicator {
+    width: 48px;
+    height: 48px;
+    font-size: 20px;
+  }
+
+  .pickups-voice-dialog-actions {
+    grid-template-columns: 1fr 1fr;
   }
 }
