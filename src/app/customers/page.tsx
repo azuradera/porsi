@@ -1,12 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Select } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Dialog } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
-import IncomeOverview from "@/components/income-overview";
 import RenewSubscriptionDialog from "@/components/renew-subscription-dialog";
 
 type Subscription = {
@@ -118,6 +117,7 @@ export default function CustomersPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [loading, setLoading] = useState(true);
+  const customerRequestId = useRef(0);
   const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
@@ -140,7 +140,8 @@ export default function CustomersPage() {
   }, []);
 
   const loadCustomers = useCallback(async () => {
-    setLoading(true);
+  const requestId = ++customerRequestId.current;
+  setLoading(true);
 
     try {
       const params = new URLSearchParams();
@@ -156,15 +157,22 @@ export default function CustomersPage() {
         throw new Error(data.message || "Gagal mengambil data pelanggan");
       }
 
-      setCustomers(data.customers ?? []);
+      if (requestId === customerRequestId.current) {
+        setCustomers(data.customers ?? []);
+      }
+
     } catch (err) {
-      toast.error(
-        err instanceof Error
-          ? err.message
-          : "Terjadi kesalahan saat mengambil data pelanggan",
-      );
-    } finally {
-      setLoading(false);
+      if (requestId === customerRequestId.current) {
+        toast.error(
+          err instanceof Error
+            ? err.message
+            : "Terjadi kesalahan saat mengambil data pelanggan",
+        );
+      }
+        } finally {
+      if (requestId === customerRequestId.current) {
+        setLoading(false);
+      }
     }
   }, [search, statusFilter]);
 
@@ -173,7 +181,10 @@ export default function CustomersPage() {
       void loadCustomers();
     }, 250);
 
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      customerRequestId.current += 1;
+    };
   }, [loadCustomers]);
 
   useEffect(() => {

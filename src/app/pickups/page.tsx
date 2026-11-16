@@ -533,14 +533,11 @@ export default function PickupsPage() {
     return eligibleSkipSubscriptions.filter(
       (subscription) =>
         normalizeText(subscription.customer.name).includes(query) ||
-        normalizeText(subscription.customer.code).includes(query) ||
-        normalizeText(subscription.package.name).includes(query),
+        normalizeText(subscription.customer.code).includes(query)
     );
   }, [eligibleSkipSubscriptions, skipSearch]);
 
-  const skipCustomerSuggestions = skipSubscriptionId
-    ? eligibleSkipSubscriptions
-    : filteredSkipSubscriptions;
+  const skipCustomerSuggestions = filteredSkipSubscriptions;
 
   const selectedSubscription = subscriptions.find(
     (subscription) => subscription.id === subscriptionId,
@@ -596,15 +593,12 @@ export default function PickupsPage() {
       if (!query) return true;
       return (
         normalizeText(subscription.customer.name).includes(query) ||
-        normalizeText(subscription.customer.code).includes(query) ||
-        normalizeText(subscription.package.name).includes(query)
+        normalizeText(subscription.customer.code).includes(query)
       );
     });
   }, [eligibleSubscriptions, customerQuery]);
 
-  const customerSuggestions = subscriptionId
-  ? eligibleSubscriptions
-  : filteredSubscriptions;
+  const customerSuggestions = filteredSubscriptions;
 
   const filteredPickups = useMemo(() => {
     const query = normalizeText(search);

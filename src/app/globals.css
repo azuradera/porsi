@@ -5455,7 +5455,7 @@
   }
 
   .pickups-page .subscriptions-form-panel.panel:focus-within {
-    z-index: 30;
+    z-index: 100;
   }
 
   .pickups-page .subscriptions-list-panel.panel {
