@@ -572,8 +572,15 @@ export default function CustomersPage() {
               <span aria-hidden="true">⌕</span>
               <input
                 type="search"
+                enterKeyHint="search"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    event.currentTarget.blur();
+                  }
+                }}
                 placeholder="Cari nama, kode, atau telepon"
                 aria-label="Cari pelanggan"
               />

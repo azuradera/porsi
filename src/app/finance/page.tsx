@@ -82,10 +82,9 @@ const monthShortLabel = (month: string) => {
 
 const fetchMonthIncome = async (targetMonth: string) => {
   try {
-    const response = await fetch(
-      `/api/reports/finance?month=${targetMonth}`,
-      { cache: "no-store" },
-    );
+    const response = await fetch(`/api/reports/finance?month=${targetMonth}`, {
+      cache: "no-store",
+    });
 
     if (!response.ok) return 0;
 
@@ -105,7 +104,9 @@ export default function FinancePage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [initialized, setInitialized] = useState(false);
-  const [history, setHistory] = useState<{ label: string; value: number }[]>([]);
+  const [history, setHistory] = useState<{ label: string; value: number }[]>(
+    [],
+  );
   const toast = useToast();
 
   useEffect(() => {
@@ -175,9 +176,7 @@ export default function FinancePage() {
     [history, month, totalIncome],
   );
 
-  const previousIncome = history.length
-    ? history[history.length - 1].value
-    : 0;
+  const previousIncome = history.length ? history[history.length - 1].value : 0;
 
   const byPackage = useMemo(() => {
     const map = new Map<string, number>();
@@ -196,9 +195,7 @@ export default function FinancePage() {
     () =>
       [...payments]
         .sort((a, b) =>
-          b.paymentDate
-            .slice(0, 10)
-            .localeCompare(a.paymentDate.slice(0, 10)),
+          b.paymentDate.slice(0, 10).localeCompare(a.paymentDate.slice(0, 10)),
         )
         .map((payment) => ({
           id: payment.id,
@@ -350,8 +347,15 @@ export default function FinancePage() {
               <span aria-hidden="true">⌕</span>
               <input
                 type="search"
+                enterKeyHint="search"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    event.currentTarget.blur();
+                  }
+                }}
                 placeholder="Cari pembayaran..."
                 aria-label="Cari pembayaran"
               />
@@ -429,9 +433,7 @@ export default function FinancePage() {
                   key={transaction.id}
                 >
                   <div className="finance-mobile-transaction-top">
-                    <span className="finance-type-badge income">
-                      Pemasukan
-                    </span>
+                    <span className="finance-type-badge income">Pemasukan</span>
                     <time>{formatDate(transaction.date)}</time>
                   </div>
 
@@ -451,11 +453,10 @@ export default function FinancePage() {
             </div>
 
             <footer className="finance-table-footer">
+              <span>Menampilkan {filteredTransactions.length} pembayaran</span>
               <span>
-                Menampilkan {filteredTransactions.length} pembayaran
-              </span>
-              <span>
-                Total {formatRupiah(
+                Total{" "}
+                {formatRupiah(
                   filteredTransactions.reduce(
                     (sum, transaction) => sum + transaction.amount,
                     0,

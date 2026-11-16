@@ -68,7 +68,9 @@ export default function PackagesPage() {
   const [dailyQuota, setDailyQuota] = useState<2 | 3>(2);
   const [mealNames, setMealNames] = useState<string[]>([""]);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
-  const [deleteTarget, setDeleteTarget] = useState<CateringPackage | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<CateringPackage | null>(
+    null,
+  );
 
   const loadPackages = useCallback(async () => {
     setLoading(true);
@@ -195,17 +197,22 @@ export default function PackagesPage() {
     const normalizedMeals = mealNames.map((m) => m.trim()).filter(Boolean);
 
     if (!trimmedName) return toast.error("Nama paket wajib diisi.");
-    if (trimmedName.length > 50) return toast.error("Nama paket maksimal 50 karakter.");
+    if (trimmedName.length > 50)
+      return toast.error("Nama paket maksimal 50 karakter.");
     if (!price.trim() || !Number.isFinite(numericPrice) || numericPrice <= 0) {
       return toast.error("Masukkan harga paket yang valid.");
     }
-    if (numericPrice > 9999999999.99) return toast.error("Harga paket melebihi batas maksimum.");
+    if (numericPrice > 9999999999.99)
+      return toast.error("Harga paket melebihi batas maksimum.");
     if (Math.round(numericPrice * 100) !== numericPrice * 100) {
       return toast.error("Harga paket maksimal memiliki dua angka desimal.");
     }
-    if (normalizedMeals.length === 0) return toast.error("Minimal satu jenis menu harus diisi.");
-    if (normalizedMeals.length > 10) return toast.error("Maksimal sepuluh jenis menu per paket.");
-    if (normalizedMeals.some((m) => m.length > 50)) return toast.error("Nama menu maksimal 50 karakter.");
+    if (normalizedMeals.length === 0)
+      return toast.error("Minimal satu jenis menu harus diisi.");
+    if (normalizedMeals.length > 10)
+      return toast.error("Maksimal sepuluh jenis menu per paket.");
+    if (normalizedMeals.some((m) => m.length > 50))
+      return toast.error("Nama menu maksimal 50 karakter.");
 
     const comparable = normalizedMeals.map((m) => m.toLocaleLowerCase("id-ID"));
     if (new Set(comparable).size !== comparable.length) {
@@ -216,7 +223,9 @@ export default function PackagesPage() {
 
     try {
       const isEditing = editingPackageId !== null;
-      const endpoint = isEditing ? `/api/packages/${editingPackageId}` : "/api/packages";
+      const endpoint = isEditing
+        ? `/api/packages/${editingPackageId}`
+        : "/api/packages";
 
       const response = await fetch(endpoint, {
         method: isEditing ? "PATCH" : "POST",
@@ -238,13 +247,17 @@ export default function PackagesPage() {
       if (!response.ok) {
         throw new Error(
           data.message ??
-            (isEditing ? "Gagal memperbarui paket." : "Gagal membuat paket katering."),
+            (isEditing
+              ? "Gagal memperbarui paket."
+              : "Gagal membuat paket katering."),
         );
       }
 
       toast.success(
         data.message ??
-          (isEditing ? "Paket berhasil diperbarui." : "Paket katering berhasil dibuat."),
+          (isEditing
+            ? "Paket berhasil diperbarui."
+            : "Paket katering berhasil dibuat."),
       );
       resetForm();
       setEditingPackageId(null);
@@ -252,7 +265,9 @@ export default function PackagesPage() {
       await loadPackages();
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Terjadi kesalahan saat menyimpan paket.",
+        err instanceof Error
+          ? err.message
+          : "Terjadi kesalahan saat menyimpan paket.",
       );
     } finally {
       setSaving(false);
@@ -296,7 +311,9 @@ export default function PackagesPage() {
       );
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Terjadi kesalahan saat mengubah status paket.",
+        err instanceof Error
+          ? err.message
+          : "Terjadi kesalahan saat mengubah status paket.",
       );
     } finally {
       setSaving(false);
@@ -330,7 +347,9 @@ export default function PackagesPage() {
       toast.success(data.message ?? "Paket berhasil dihapus secara permanen.");
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Terjadi kesalahan saat menghapus paket.",
+        err instanceof Error
+          ? err.message
+          : "Terjadi kesalahan saat menghapus paket.",
       );
       setDeleteTarget(null);
     } finally {
@@ -460,7 +479,8 @@ export default function PackagesPage() {
 
               {price && Number(price) > 0 && (
                 <small>
-                  Perkiraan harga untuk 15 hari: {formatCurrency(Number(price) / 2)}
+                  Perkiraan harga untuk 15 hari:{" "}
+                  {formatCurrency(Number(price) / 2)}
                 </small>
               )}
             </div>
@@ -485,7 +505,9 @@ export default function PackagesPage() {
               <div className="packages-meals-heading">
                 <div>
                   <span>Daftar Menu *</span>
-                  <small>Isi minimal satu menu. Kolom kosong akan diabaikan.</small>
+                  <small>
+                    Isi minimal satu menu. Kolom kosong akan diabaikan.
+                  </small>
                 </div>
               </div>
 
@@ -502,7 +524,9 @@ export default function PackagesPage() {
                     <input
                       type="text"
                       value={meal}
-                      onChange={(event) => updateMealName(index, event.target.value)}
+                      onChange={(event) =>
+                        updateMealName(index, event.target.value)
+                      }
                       placeholder={`Nama menu ${index + 1}`}
                       maxLength={50}
                       aria-label={`Nama menu ${index + 1}`}
@@ -546,7 +570,11 @@ export default function PackagesPage() {
                 Batal
               </button>
 
-              <button type="submit" className="packages-primary-button" disabled={saving}>
+              <button
+                type="submit"
+                className="packages-primary-button"
+                disabled={saving}
+              >
                 {saving
                   ? "Menyimpan..."
                   : editingPackageId
@@ -563,7 +591,8 @@ export default function PackagesPage() {
           <div>
             <h2>Daftar Paket</h2>
             <p>
-              Menampilkan {filteredPackages.length} dari {packages.length} paket.
+              Menampilkan {filteredPackages.length} dari {packages.length}{" "}
+              paket.
             </p>
           </div>
         </div>
@@ -573,8 +602,15 @@ export default function PackagesPage() {
             <span aria-hidden="true">⌕</span>
             <input
               type="search"
+              enterKeyHint="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  event.currentTarget.blur();
+                }
+              }}
               placeholder="Cari paket atau jenis menu..."
             />
           </label>
@@ -646,7 +682,9 @@ export default function PackagesPage() {
                 </div>
 
                 <div className="packages-card-meals">
-                  <span className="packages-card-meals-title">Pilihan Menu</span>
+                  <span className="packages-card-meals-title">
+                    Pilihan Menu
+                  </span>
                   <div className="packages-meal-chips">
                     {item.meals.map((meal) => (
                       <span key={meal.id}>{meal.mealName}</span>
@@ -704,7 +742,9 @@ export default function PackagesPage() {
         busy={saving}
         danger={confirmAction ? !confirmAction.nextStatus : false}
         icon={confirmAction?.nextStatus ? "✓" : "!"}
-        title={confirmAction?.nextStatus ? "Aktifkan paket?" : "Nonaktifkan paket?"}
+        title={
+          confirmAction?.nextStatus ? "Aktifkan paket?" : "Nonaktifkan paket?"
+        }
         description={
           confirmAction?.nextStatus
             ? `Paket "${confirmAction.item.name}" akan tersedia kembali untuk langganan baru.`
