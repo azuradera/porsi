@@ -9,6 +9,7 @@ export function proxy(request: NextRequest) {
 
   if (
     pathname === "/login" ||
+    pathname === "/manifest.webmanifest" ||
     pathname.startsWith("/api/auth/") ||
     pathname === "/api/internal/subscription-days"
   ) {
